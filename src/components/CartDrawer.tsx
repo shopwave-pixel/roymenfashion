@@ -125,7 +125,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ isOpen, onClose }) => {
                 </button>
               </div>
             ) : (
-              cart.map((item, index) => (
+              cart.filter(item => item && item.product).map((item, index) => (
                 <div
                   key={`${item.product.id}-${item.selectedSize}-${item.selectedColor}-${index}`}
                   className="flex items-start pb-4 border-b border-zinc-100 dark:border-zinc-900 last:border-0"

@@ -1210,7 +1210,7 @@ export const Cart: React.FC = () => {
 
               {/* Items row iterator */}
               <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
-                {cart.map((item, index) => (
+                {cart.filter(item => item && item.product).map((item, index) => (
                   <div key={index} className="flex justify-between items-start text-xs border-b border-zinc-100 dark:border-zinc-900 pb-3 last:border-0 last:pb-0">
                     <img src={item.product.images[0] || null} alt="" referrerPolicy="no-referrer" className="w-12 aspect-[3/4] object-cover rounded bg-zinc-100 shrink-0" />
                     <div className="ml-3 flex-1">
