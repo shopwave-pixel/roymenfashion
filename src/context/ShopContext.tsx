@@ -187,7 +187,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Seed some mock orders for admin analytics display
     const mockOrders = [
       {
-        id: 'ROY-849204',
+        id: 'RM-849204',
         userId: 'customer-1',
         billingDetails: {
           name: "Sartorial Customer",
@@ -223,7 +223,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       },
       {
-        id: 'ROY-127493',
+        id: 'RM-127493',
         userId: 'customer-1',
         billingDetails: {
           name: "Sartorial Customer",
@@ -259,7 +259,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       },
       {
-        id: 'ROY-395028',
+        id: 'RM-395028',
         userId: 'customer-1',
         billingDetails: {
           name: "Sartorial Customer",
@@ -639,7 +639,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const deliveryFee = subtotal >= 5000 || subtotal === 0 ? 0 : (billing.district === 'Dhaka' ? 80 : 150);
     const total = subtotal + deliveryFee - discount;
     const timeline = customTimeline || (billing.district === 'Dhaka' ? '24 - 48 Hours' : '3 - 5 Days');
-    const orderId = 'ROY-' + Math.floor(100000 + Math.random() * 900000);
+    const orderId = 'RM-' + Math.floor(100000 + Math.random() * 900000);
 
     const placementData = {
       id: orderId,

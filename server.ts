@@ -202,7 +202,7 @@ const loadLocalDB = (): LocalDB => {
     products: localInitialProducts,
     orders: [
       {
-        id: 'ROY-849204',
+        id: 'RM-849204',
         userId: 'customer-1',
         billingDetails: {
           name: "Sartorial Customer",
@@ -716,7 +716,7 @@ app.post('/api/orders', async (req, res) => {
     return res.status(400).json({ message: 'Invalid order structure parameters.' });
   }
 
-  const generatedOrderId = 'ROY-' + Math.floor(100000 + Math.random() * 900000);
+  const generatedOrderId = 'RM-' + Math.floor(100000 + Math.random() * 900000);
   const placement = {
     id: generatedOrderId,
     userId: userId || null,
