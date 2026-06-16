@@ -162,8 +162,17 @@ export const Footer: React.FC = () => {
 
         {/* Footer Base Credits & Badges */}
         <div className="pt-8 flex flex-col md:flex-row items-center justify-between gap-6">
-          <div className="text-center md:text-left text-xs text-zinc-600">
-            <p>© {currentYear} ROYMEN Bangladesh. {getTranslatedText("All Rights Reserved. Engineered for excellence.", "সর্বস্বত্ব সংরক্ষিত।")} </p>
+          <div className="text-center md:text-left text-xs text-zinc-605">
+            <p>© {currentYear} ROYMEN Bangladesh. {getTranslatedText("All Rights Reserved. Engineered for excellence.", "সর্বস্বত্ব সংরক্ষিত।")}{" "}
+              <a 
+                href="https://roymenfashion-production.up.railway.app" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="hover:text-white underline text-zinc-500 transition-colors"
+              >
+                roymenfashion-production.up.railway.app
+              </a>
+            </p>
           </div>
 
           {/* Bangladesh localized secure payment badging */}
