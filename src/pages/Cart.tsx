@@ -607,6 +607,7 @@ export const Cart: React.FC = () => {
 
       setPlacedOrder({
         ...createdOrder,
+        orderId: actualOrderId,
         name: shippingName,
         phone: shippingPhone,
         email: shippingEmail,
@@ -706,7 +707,7 @@ export const Cart: React.FC = () => {
               {getTranslatedText("Sartorial Decree Created", "অর্ডার সফলভাবে প্রাপ্ত")}
             </h1>
             <p className="text-xs text-zinc-500 font-mono tracking-widest uppercase mb-6">
-              ORDER REF ID: <span className="text-black dark:text-white font-black">{placedOrder.orderId}</span>
+              ORDER REF ID: <span className="text-black dark:text-white font-black">{placedOrder.orderId || placedOrder.id}</span>
             </p>
 
             <div className="text-xs sm:text-sm text-zinc-650 dark:text-zinc-400 max-w-lg mx-auto leading-relaxed">
