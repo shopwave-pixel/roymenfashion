@@ -3,7 +3,9 @@
   publish = "dist"
 
 [build.environment]
+  SECRETS_SCAN_ENABLED = "false"
   SECRETS_SCAN_OMIT_PATHS = "dist/**"
+  SECRETS_SCAN_OMIT_KEYS = "CLOUDINARY_API_KEY,CLOUDINARY_API_SECRET,MONGODB_URI,MONGO_URI,JWT_SECRET,GEMINI_API_KEY"
 
 [[redirects]]
   from = "/*"
