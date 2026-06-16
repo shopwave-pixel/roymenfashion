@@ -738,8 +738,8 @@ export const Cart: React.FC = () => {
               <div className="space-y-2 text-xs font-medium">
                 {placedOrder.items.map((item: any, i: number) => (
                   <div key={i} className="flex justify-between text-zinc-650 dark:text-zinc-350">
-                    <span className="line-clamp-1">{item.product.name} (x{item.quantity})</span>
-                    <span className="font-mono font-bold text-black dark:text-white shrink-0">৳{(item.product.price * item.quantity).toLocaleString()}</span>
+                    <span className="line-clamp-1">{item.name} (x{item.quantity})</span>
+                    <span className="font-mono font-bold text-black dark:text-white shrink-0">৳{(item.price * item.quantity).toLocaleString()}</span>
                   </div>
                 ))}
               </div>
