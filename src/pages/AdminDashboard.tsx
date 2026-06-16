@@ -481,7 +481,7 @@ export const AdminDashboard: React.FC = () => {
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs pb-3 border-b border-zinc-150 dark:border-zinc-800">
                           <div>
                             <p className="font-mono text-zinc-400 uppercase text-[10px]">ORDER REF STRING</p>
-                            <span className="font-mono font-black text-black dark:text-white">{o.orderId}</span>
+                            <span className="font-mono font-black text-black dark:text-white">{o.id || o.orderId}</span>
                           </div>
 
                           <div>

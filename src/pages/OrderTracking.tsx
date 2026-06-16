@@ -118,7 +118,7 @@ export const OrderTracking: React.FC = () => {
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-5 border-b border-zinc-200 dark:border-zinc-800 text-xs font-semibold">
               <div className="space-y-1">
                 <span className="text-[10px] text-zinc-400 block uppercase font-mono">ORDER BOOK REF ID</span>
-                <strong className="text-sm font-black text-black dark:text-white font-mono">{order.orderId}</strong>
+                <strong className="text-sm font-black text-black dark:text-white font-mono">{order.id || order.orderId}</strong>
               </div>
 
               <div className="space-y-1">

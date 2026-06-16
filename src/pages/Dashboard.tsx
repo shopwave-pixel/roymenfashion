@@ -259,7 +259,7 @@ export const Dashboard: React.FC = () => {
                         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-zinc-150 dark:border-zinc-850 text-xs">
                           <div>
                             <p className="font-black text-black dark:text-white uppercase tracking-wider">
-                              {getTranslatedText("ORDER REF ID:", "অর্ডার আইডি:")} <span className="font-mono text-yellow-600 dark:text-yellow-500">{o.orderId}</span>
+                              {getTranslatedText("ORDER REF ID:", "অর্ডার আইডি:")} <span className="font-mono text-yellow-600 dark:text-yellow-500">{o.id || o.orderId}</span>
                             </p>
                             <p className="text-[10px] text-zinc-400 font-medium mt-0.5">PLACED: {new Date(o.createdAt).toLocaleString()}</p>
                           </div>
@@ -326,7 +326,7 @@ export const Dashboard: React.FC = () => {
                               </button>
                             )}
                             <Link
-                              to={`/order-tracking?orderId=${o.orderId}`}
+                              to={`/order-tracking?orderId=${o.id || o.orderId}`}
                               className="px-4 py-2 border border-zinc-200 dark:border-zinc-800 text-[10px] text-zinc-600 hover:text-black dark:text-zinc-400 dark:hover:text-white font-black uppercase tracking-wider rounded"
                             >
                               {getTranslatedText("Track Order Dispatch", "অর্ডার লাইভ ট্র্যাকিং")}
