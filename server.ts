@@ -13,7 +13,7 @@ import { products as localInitialProducts } from './src/data/products';
 // ENV & CONSTANTS
 // ------------------------------------------------------------------
 const PORT = Number(process.env.PORT || 3000);
-const JWT_SECRET = process.env.JWT_SECRET || 'roymen_luxury_sartorial_token_secret_key_2026';
+const JWT_SECRET = process.env.JWT_SECRET || '';
 const MONGO_URI = process.env.MONGODB_URI || process.env.MONGO_URI || '';
 
 // Cloudinary config
