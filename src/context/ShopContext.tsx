@@ -376,12 +376,80 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('roymen_emaillogs', JSON.stringify(emailLogs));
   }, [emailLogs]);
 
-  // Refresh products triggers dummy reload (since it reads directly from state)
+  // On mount or token change, pull catalog products and sync session details
+  useEffect(() => {
+    const initAppData = async () => {
+      // 1. Fetch products from live backend
+      try {
+        setProductsLoading(true);
+        const res = await fetch('/api/products');
+        if (res.ok) {
+          const apiProducts = await res.json();
+          if (Array.isArray(apiProducts) && apiProducts.length > 0) {
+            setProducts(apiProducts);
+          }
+        }
+      } catch (err) {
+        console.warn('Backend /api/products could not be reached, using client-side cache.', err);
+      } finally {
+        setProductsLoading(false);
+      }
+
+      // 2. Fetch authenticated profile detail and orders if token is present
+      if (token) {
+        try {
+          setAuthLoading(true);
+          const meRes = await fetch('/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData?.user) {
+              setUser(meData.user);
+            }
+          }
+        } catch (err) {
+          console.warn('Backend auth profile sync failed.', err);
+        } finally {
+          setAuthLoading(false);
+        }
+
+        // 3. Sync orders for active session from DB
+        try {
+          const ordRes = await fetch('/api/orders', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (ordRes.ok) {
+            const apiOrders = await ordRes.json();
+            if (Array.isArray(apiOrders)) {
+              setOrders(apiOrders);
+            }
+          }
+        } catch (err) {
+          console.warn('Backend orders sync failed.', err);
+        }
+      }
+    };
+
+    initAppData();
+  }, [token]);
+
+  // Refresh products from live server
   const refreshProducts = async () => {
     setProductsLoading(true);
-    setTimeout(() => {
+    try {
+      const res = await fetch('/api/products');
+      if (res.ok) {
+        const apiProducts = await res.json();
+        if (Array.isArray(apiProducts) && apiProducts.length > 0) {
+          setProducts(apiProducts);
+        }
+      }
+    } catch (err) {
+      console.warn('Backend products refresh failed.', err);
+    } finally {
       setProductsLoading(false);
-    }, 200);
+    }
   };
 
   // Helper helper to add simulated email logs
@@ -538,10 +606,38 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
 
   // -------------------------------------------------------------
-  // Clean Local Auth implementations (No backend requested)
+  // Clean Local Auth implementations with server sync
   // -------------------------------------------------------------
   const registerUser = async (name: string, email: string, password: string): Promise<boolean> => {
     const cleanEmail = email.trim().toLowerCase();
+
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email: cleanEmail, password })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.token && data.user) {
+          setToken(data.token);
+          setUser(data.user);
+          const matchUserInDb = users.find(u => u.email === cleanEmail);
+          if (!matchUserInDb) {
+            setUsers(prev => [...prev, { id: data.user.id, name, email: cleanEmail, role: 'customer', addresses: [] }]);
+          }
+          addToast(getTranslatedText("Sartorial profile registered on server!", "অ্যাকাউন্ট সফলভাবে নিবন্ধন করা হয়েছে!"), "success");
+          return true;
+        }
+      } else {
+        const errorData = await res.json();
+        addToast(errorData.message || "Registration failed", "error");
+        return false;
+      }
+    } catch (err) {
+      console.warn("Backend /api/auth/register unavailable. Falling back to local database.", err);
+    }
+
     const existing = users.find(u => u.email.trim().toLowerCase() === cleanEmail);
     if (existing) {
       addToast(getTranslatedText("Email is already registered!", "এই ইমেইলটি ইতিমধ্যে নিবন্ধিত হয়েছে!"), "error");
@@ -573,12 +669,36 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       `Hi ${name}, thank you for joining ROYMEN! Wear Confidence. Your customer profile has been generated successfully.`
     );
 
-    addToast(getTranslatedText("Sartorial profile registered!", "অ্যাকাউন্ট সফলভাবে নিবন্ধন করা হয়েছে!"), "success");
+    addToast(getTranslatedText("Sartorial profile registered locally!", "অ্যাকাউন্ট সফলভাবে নিবন্ধন করা হয়েছে!"), "success");
     return true;
   };
 
   const loginUser = async (email: string, password: string): Promise<boolean> => {
     const cleanEmail = email.trim().toLowerCase();
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: cleanEmail, password })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.token && data.user) {
+          setToken(data.token);
+          setUser(data.user);
+          addToast(getTranslatedText(`Welcome back, ${data.user.name}!`, `স্বাগতম, ${data.user.name}!`), "success");
+          return true;
+        }
+      } else {
+        const errorData = await res.json();
+        addToast(errorData.message || "Login failed", "error");
+        return false;
+      }
+    } catch (err) {
+      console.warn("Backend /api/auth/login unavailable. Falling back to local database.", err);
+    }
+
     const found = users.find(u => u.email.trim().toLowerCase() === cleanEmail && u.password === password);
     if (found) {
       setToken('jwt-simulated-' + found.id);
@@ -605,6 +725,31 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addUserAddress = async (addr: UserAddress): Promise<boolean> => {
     if (!user) return false;
+
+    if (token) {
+      try {
+        const res = await fetch('/api/auth/address', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(addr)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.addresses) {
+            setUser(prev => prev ? { ...prev, addresses: data.addresses } : null);
+            setUsers(prev => prev.map(u => u.id === user.id ? { ...u, addresses: data.addresses } : u));
+            addToast(getTranslatedText("Delivery coordinates stored on server!", "ঠিকানা সফলভাবে সংরক্ষণ করা হয়েছে"), "success");
+            return true;
+          }
+        }
+      } catch (err) {
+        console.warn("Backend /api/auth/address unavailable. Falling back.", err);
+      }
+    }
+
     const updatedUsers = users.map(u => {
       if (u.id === user.id) {
         const addresses = u.addresses ? [...u.addresses, addr] : [addr];
@@ -622,12 +767,12 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     });
 
-    addToast(getTranslatedText("Delivery coordinates stored!", "ঠিকানা সফলভাবে সংরক্ষণ করা হয়েছে"), "success");
+    addToast(getTranslatedText("Delivery coordinates stored locally!", "ঠিকানা সফলভাবে সংরক্ষণ করা হয়েছে"), "success");
     return true;
   };
 
   // -------------------------------------------------------------
-  // Order & Tracking operations locally
+  // Order & Tracking operations locally with live backend integration
   // -------------------------------------------------------------
   const placeOrder = async (billing: UserAddress, payMethod?: string, customTimeline?: string): Promise<any | null> => {
     const subtotal = cart.reduce((total, item) => total + item.product.price * item.quantity, 0);
@@ -639,10 +784,10 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const deliveryFee = subtotal >= 5000 || subtotal === 0 ? 0 : (billing.district === 'Dhaka' ? 80 : 150);
     const total = subtotal + deliveryFee - discount;
     const timeline = customTimeline || (billing.district === 'Dhaka' ? '24 - 48 Hours' : '3 - 5 Days');
-    const orderId = 'RM-' + Math.floor(100000 + Math.random() * 900000);
 
-    const placementData = {
-      id: orderId,
+    const paymentMethodSelected = payMethod || 'cod';
+
+    const orderPayload = {
       userId: user?.id || 'guest-' + Math.random().toString(36).substring(2, 5),
       billingDetails: billing,
       items: cart.map(item => ({
@@ -659,7 +804,32 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       deliveryFee,
       total,
       timeline,
-      paymentMethod: payMethod || 'cod',
+      paymentMethod: paymentMethodSelected
+    };
+
+    // 1. Post to live backend if possible
+    try {
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderPayload)
+      });
+      if (res.ok) {
+        const createdOrder = await res.json();
+        setOrders(prev => [createdOrder, ...prev]);
+        clearCart();
+        addToast(getTranslatedText("Order placed successfully!", "অর্ডার সফলভাবে সম্পন্ন হয়েছে!"), "success");
+        return createdOrder;
+      }
+    } catch (err) {
+      console.warn("Backend /api/orders POST unavailable. Placing order locally.", err);
+    }
+
+    // --- LOCAL FALLBACK ---
+    const orderId = 'RM-' + Math.floor(100000 + Math.random() * 900000);
+    const placementData = {
+      id: orderId,
+      ...orderPayload,
       orderStatus: 'payment_pending',
       paymentVerified: false,
       createdAt: new Date().toISOString(),
@@ -684,7 +854,7 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       );
     }
 
-    addToast(getTranslatedText("Order placed successfully!", "অর্ডার সফলভাবে সম্পন্ন হয়েছে!"), "success");
+    addToast(getTranslatedText("Order placed successfully locally!", "অর্ডার সফলভাবে সম্পন্ন হয়েছে!"), "success");
     return placementData;
   };
 
@@ -695,6 +865,29 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sender: string,
     amount: number
   ): Promise<boolean> => {
+    // 1. Submit receipt to live backend api
+    try {
+      const res = await fetch(`/api/orders/${orderId}/payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          paymentMethod: payMethod,
+          transactionId: txid,
+          senderNumber: sender,
+          paidAmount: amount
+        })
+      });
+      if (res.ok) {
+        const updatedOrder = await res.json();
+        setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+        addToast(getTranslatedText("Payment transaction details synced with server!", "পেমেন্ট কোড সার্ভারে যাচাইয়ের জন্য পাঠানো হয়েছে"), "success");
+        return true;
+      }
+    } catch (err) {
+      console.warn("Backend payment verification submit failed. Falling back.", err);
+    }
+
+    // --- LOCAL FALLBACK ---
     let success = false;
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
@@ -728,11 +921,33 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const trackOrder = async (orderId: string): Promise<any | null> => {
+    try {
+      const res = await fetch(`/api/orders/${orderId}`);
+      if (res.ok) {
+        const trackData = await res.json();
+        return trackData;
+      }
+    } catch (err) {
+      console.warn("Backend tracking check failed, checking local state.", err);
+    }
     const found = orders.find(o => o.id === orderId);
     return found ? JSON.parse(JSON.stringify(found)) : null;
   };
 
   const getMyOrders = async (): Promise<any[]> => {
+    if (token) {
+      try {
+        const res = await fetch('/api/orders', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const ords = await res.json();
+          if (Array.isArray(ords)) return ords;
+        }
+      } catch (err) {
+        console.warn("Could not retrieve orders from server.", err);
+      }
+    }
     if (!user) return [];
     return orders.filter(o => o.userId === user.id);
   };
@@ -743,6 +958,28 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return false;
     }
 
+    if (token) {
+      try {
+        const res = await fetch(`/api/products/${productId}/review`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ rating, comment })
+        });
+        if (res.ok) {
+          const apiProduct = await res.json();
+          setProducts(prev => prev.map(p => p.id === productId ? apiProduct : p));
+          addToast(getTranslatedText("Review registered on server. Thank you!", "রিভিউ দেওয়ার জন্য অসংখ্য ধন্যবাদ!"), "success");
+          return true;
+        }
+      } catch (err) {
+        console.warn("Posting product review on server failed.", err);
+      }
+    }
+
+    // --- LOCAL FALLBACK ---
     let success = false;
     const modifiedProducts = products.map(p => {
       if (p.id === productId) {
@@ -755,7 +992,6 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
           date: new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
         };
         const updatedReviews = [newReview, ...previousReviews];
-        // Recalculate average rating
         const sumRating = updatedReviews.reduce((sum, r) => sum + r.rating, 0);
         const avgRating = Number((sumRating / updatedReviews.length).toFixed(1));
         return {
@@ -777,13 +1013,53 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // -------------------------------------------------------------
-  // Administrative Operations (Local State driven)
+  // Administrative Operations (Local State with server sync)
   // -------------------------------------------------------------
   const getAllOrders = async (): Promise<any[]> => {
+    if (token) {
+      try {
+        const res = await fetch('/api/orders', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const ords = await res.json();
+          if (Array.isArray(ords)) return ords;
+        }
+      } catch (err) {
+        console.warn("Could not fetch server admin orders.", err);
+      }
+    }
     return orders;
   };
 
   const verifyPaymentAdmin = async (orderId: string, approve: boolean): Promise<boolean> => {
+    if (token) {
+      try {
+        const res = await fetch(`/api/orders/${orderId}/verify-payment`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ approve })
+        });
+        if (res.ok) {
+          const updatedOrder = await res.json();
+          setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+          addToast(
+            approve 
+              ? getTranslatedText("Deposit successfully verified & approved!", "পেমেন্ট সফলভাবে এপ্রুভ হয়েছে") 
+              : getTranslatedText("Payment logs rejected.", "পেমেন্ট প্রত্যাখ্যাত হয়েছে"),
+            "success"
+          );
+          return true;
+        }
+      } catch (err) {
+        console.warn("Server side payment verify failed.", err);
+      }
+    }
+
+    // --- LOCAL FALLBACK ---
     let success = false;
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
@@ -820,6 +1096,28 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateOrderStatusAdmin = async (orderId: string, newStatus: string): Promise<boolean> => {
+    if (token) {
+      try {
+        const res = await fetch(`/api/orders/${orderId}/status`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ orderStatus: newStatus })
+        });
+        if (res.ok) {
+          const updatedOrder = await res.json();
+          setOrders(prev => prev.map(o => o.id === orderId ? updatedOrder : o));
+          addToast(getTranslatedText(`Shipment timeline transitioned to: ${newStatus}`, `অর্ডারের অগ্রগতি পরিবর্তন হয়েছে: ${newStatus}`), "success");
+          return true;
+        }
+      } catch (err) {
+        console.warn("Server status update failed.", err);
+      }
+    }
+
+    // --- LOCAL FALLBACK ---
     let success = false;
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
@@ -850,6 +1148,28 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const createNewProductAdmin = async (prodData: Partial<Product>): Promise<boolean> => {
+    if (token) {
+      try {
+        const res = await fetch('/api/products', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(prodData)
+        });
+        if (res.ok) {
+          const apiProduct = await res.json();
+          setProducts(prev => [apiProduct, ...prev]);
+          addToast(getTranslatedText("New catalog attire published on server!", "নতুন পোশাক কালেকশনে যোগ করা হয়েছে।"), "success");
+          return true;
+        }
+      } catch (err) {
+        console.warn("Server product creation failed.", err);
+      }
+    }
+
+    // --- LOCAL FALLBACK ---
     const newProduct: Product = {
       id: 'prod-' + Math.floor(1000 + Math.random() * 9000),
       name: prodData.name || 'Sartorial Apparel',
@@ -872,6 +1192,28 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateProductAdmin = async (productId: string, prodData: Partial<Product>): Promise<boolean> => {
+    if (token) {
+      try {
+        const res = await fetch(`/api/products/${productId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(prodData)
+        });
+        if (res.ok) {
+          const apiProduct = await res.json();
+          setProducts(prev => prev.map(p => p.id === productId ? apiProduct : p));
+          addToast(getTranslatedText("Atelier attire layout customized on server!", "পোশাক সেটিংস সফলভাবে সেভ হয়েছে!"), "success");
+          return true;
+        }
+      } catch (err) {
+        console.warn("Server product update failed.", err);
+      }
+    }
+
+    // --- LOCAL FALLBACK ---
     let success = false;
     setProducts(prev => prev.map(p => {
       if (p.id === productId) {
@@ -892,12 +1234,44 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const deleteProductAdmin = async (productId: string): Promise<boolean> => {
+    if (token) {
+      try {
+        const res = await fetch(`/api/products/${productId}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          setProducts(prev => prev.filter(p => p.id !== productId));
+          addToast(getTranslatedText("Apparel deleted from server collection.", "পোশাকটি সফলভাবে ডিলিট করা হয়েছে"), "success");
+          return true;
+        }
+      } catch (err) {
+        console.warn("Server product deletion failed.", err);
+      }
+    }
+
+    // --- LOCAL FALLBACK ---
     setProducts(prev => prev.filter(p => p.id !== productId));
     addToast(getTranslatedText("Apparel deleted from collection.", "পোশাকটি সফলভাবে ডিলিট করা হয়েছে"), "success");
     return true;
   };
 
   const getAdminAnalytics = async (): Promise<any | null> => {
+    if (token) {
+      try {
+        const res = await fetch('/api/admin/analytics', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const serverAnalytics = await res.json();
+          return serverAnalytics;
+        }
+      } catch (err) {
+        console.warn("Server analytics fetch failed.", err);
+      }
+    }
+
+    // --- LOCAL FALLBACK ---
     const totalOrders = orders.length;
     const deliveredOrders = orders.filter(o => o.orderStatus === 'delivered');
     const billingRevenue = deliveredOrders.reduce((sum, o) => sum + o.total, 0);
@@ -950,6 +1324,19 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const getAdminEmailLogs = async (): Promise<any[]> => {
+    if (token) {
+      try {
+        const res = await fetch('/api/admin/emails', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const apiEmails = await res.json();
+          if (Array.isArray(apiEmails)) return apiEmails;
+        }
+      } catch (err) {
+        console.warn("Server email logs fetch failed.", err);
+      }
+    }
     return emailLogs;
   };
 
