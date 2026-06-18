@@ -434,6 +434,9 @@ export const districtAreas: Record<string, { en: string; bn: string }[]> = {
   ]
 };
 
+const BKASH_PERSONAL_NUMBER = process.env.BKASH_PERSONAL_NUMBER || '+8801721922927';
+const NAGAD_PERSONAL_NUMBER = process.env.NAGAD_PERSONAL_NUMBER || '+8801721922927';
+
 export const Cart: React.FC = () => {
   const {
     cart,
@@ -1051,8 +1054,8 @@ export const Cart: React.FC = () => {
                   <div className="p-4 bg-yellow-50/20 dark:bg-yellow-950/10 border border-yellow-250 dark:border-yellow-950 rounded-lg space-y-4 text-xs font-medium">
                     <p className="text-zinc-650 dark:text-zinc-300 leading-relaxed font-semibold">
                       💬 {getTranslatedText(
-                        `Please send the Advance Delivery Charge of BDT ৳${deliveryFee} through bKash or Nagad to our official Send Money wallet: 01721922927 (Reference: ROYMEN). Submit deposit details below:`,
-                        `দয়া করে অগ্রিম ডেলিভারি চার্জ ৳${deliveryFee} নিচের বিকাশ/নগদ নাম্বারে সেন্ডমানি করে (রেফারেন্স: ROYMEN) নিচে ট্রানজেকশন তথ্য দিন: ০১৭২১৯২২৯২৭`
+                        `Please send the Advance Delivery Charge of BDT ৳${deliveryFee} through bKash or Nagad to our official Send Money wallet: ${BKASH_PERSONAL_NUMBER} / ${NAGAD_PERSONAL_NUMBER} (Reference: ROYMEN). Submit deposit details below:`,
+                        `দয়া করে অগ্রিম ডেলিভারি চার্জ ৳${deliveryFee} নিচের বিকাশ/নগদ নাম্বারে সেন্ডমানি করে (রেফারেন্স: ROYMEN) নিচে ট্রানজেকশন তথ্য দিন: ${BKASH_PERSONAL_NUMBER} / ${NAGAD_PERSONAL_NUMBER}`
                       )}
                     </p>
                     
@@ -1118,8 +1121,8 @@ export const Cart: React.FC = () => {
                   <div className="p-4 bg-pink-50/20 dark:bg-pink-950/10 border border-pink-100 dark:border-pink-950 rounded-lg space-y-4 text-xs">
                     <p className="text-zinc-650 dark:text-zinc-300 leading-relaxed font-semibold">
                       💬 {getTranslatedText(
-                        "Please transmit total order value BDT to our official Send Money wallet: 01721922927. Note ROYMEN in reference, then insert transactional details below:",
-                        "আমাদের অফিশিয়াল সেন্ডমানি বিকাশ নাম্বারে মূল্য পাঠান: 01721922927 । রেফারেন্স বক্সে লিখুন - ROYMEN এবং নিচের ইনপুটে ট্রানজেকশন আইডি দিন:"
+                        `Please transmit total order value BDT to our official Send Money wallet: ${BKASH_PERSONAL_NUMBER}. Note ROYMEN in reference, then insert transactional details below:`,
+                        `আমাদের অফিশিয়াল সেন্ডমানি বিকাশ নাম্বারে মূল্য পাঠান: ${BKASH_PERSONAL_NUMBER} । রেফারেন্স বক্সে লিখুন - ROYMEN এবং নিচের ইনপুটে ট্রানজেকশন আইডি দিন:`
                       )}
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1154,8 +1157,8 @@ export const Cart: React.FC = () => {
                   <div className="p-4 bg-orange-50/20 dark:bg-orange-950/10 border border-orange-100 dark:border-orange-950 rounded-lg space-y-4 text-xs font-medium">
                     <p className="text-zinc-650 dark:text-zinc-300 leading-relaxed font-semibold">
                       💬 {getTranslatedText(
-                        "Please transmit total order value BDT to our official Send Money wallet: 01721922927. Note ROYMEN in reference, then insert transactional details below:",
-                        "আমাদের অফিশিয়াল সেন্ডমানি নগদ নাম্বারে মূল্য পাঠান: 01721922927 । রেফারেন্স বক্সে লিখুন - ROYMEN এবং নিচের ইনপুটে ট্রানজেকশন আইডি দিন:"
+                        `Please transmit total order value BDT to our official Send Money wallet: ${NAGAD_PERSONAL_NUMBER}. Note ROYMEN in reference, then insert transactional details below:`,
+                        `আমাদের অফিশিয়াল সেন্ডমানি নগদ নাম্বারে মূল্য পাঠান: ${NAGAD_PERSONAL_NUMBER} । রেফারেন্স বক্সে লিখুন - ROYMEN এবং নিচের ইনপুটে ট্রানজেকশন আইডি দিন:`
                       )}
                     </p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

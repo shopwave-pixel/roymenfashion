@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useShop } from '../context/ShopContext';
 import { Mail, Phone, MapPin, Check, Plus, Minus, Send, ShieldAlert } from 'lucide-react';
 
+const CONTACT_PHONE = process.env.BKASH_PERSONAL_NUMBER || '+8801721922927';
+
 /* ==========================================================
    A. ABOUT US COMPONENT
    ========================================================== */
@@ -146,7 +148,7 @@ export const Contact: React.FC = () => {
                 </p>
                 <p className="flex items-center space-x-3">
                   <Phone size={16} className="text-zinc-805 shrink-0" />
-                  <span>01721922927</span>
+                  <span>{CONTACT_PHONE}</span>
                 </p>
                 <p className="flex items-center space-x-3">
                   <Mail size={16} className="text-zinc-805 shrink-0" />

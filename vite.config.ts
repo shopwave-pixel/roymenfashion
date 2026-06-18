@@ -7,6 +7,10 @@ export default defineConfig(() => {
   return {
     base: '/',
     plugins: [react(), tailwindcss()],
+    define: {
+      'process.env.BKASH_PERSONAL_NUMBER': JSON.stringify(process.env.BKASH_PERSONAL_NUMBER || '+8801721922927'),
+      'process.env.NAGAD_PERSONAL_NUMBER': JSON.stringify(process.env.NAGAD_PERSONAL_NUMBER || '+8801721922927'),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

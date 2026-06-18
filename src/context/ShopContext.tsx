@@ -70,6 +70,12 @@ interface ShopContextType {
   deleteProductAdmin: (productId: string) => Promise<boolean>;
   getAdminAnalytics: () => Promise<any | null>;
   getAdminEmailLogs: () => Promise<any[]>;
+
+  // Database Connection Diagnostics
+  isMongoConnected: boolean;
+  dbDiagnostics: any;
+  refreshHealth: () => Promise<void>;
+  refreshOrders: () => Promise<void>;
 }
 
 const ShopContext = createContext<ShopContextType | undefined>(undefined);
@@ -125,6 +131,10 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [productsLoading, setProductsLoading] = useState<boolean>(false);
+
+  // Database active status variables
+  const [isMongoConnected, setIsMongoConnected] = useState<boolean>(false);
+  const [dbDiagnostics, setDbDiagnostics] = useState<any>(null);
 
   // Users database in localStorage
   const [users, setUsers] = useState<any[]>(() => {
@@ -376,9 +386,45 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('roymen_emaillogs', JSON.stringify(emailLogs));
   }, [emailLogs]);
 
+  // Get database connection metrics from backend /api/health
+  const refreshHealth = async () => {
+    try {
+      const res = await fetch('/api/health');
+      if (res.ok) {
+        const data = await res.json();
+        setIsMongoConnected(data.isMongoConnected);
+        setDbDiagnostics(data);
+      }
+    } catch (err) {
+      console.warn('Backend health check diagnostic unreachable.', err);
+      setIsMongoConnected(false);
+    }
+  };
+
+  // Sync orders for active user or admin
+  const refreshOrders = async () => {
+    if (!token) return;
+    try {
+      const ordRes = await fetch('/api/orders', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (ordRes.ok) {
+        const apiOrders = await ordRes.json();
+        if (Array.isArray(apiOrders)) {
+          setOrders(apiOrders);
+        }
+      }
+    } catch (err) {
+      console.warn('Backend orders synchronization failed.', err);
+    }
+  };
+
   // On mount or token change, pull catalog products and sync session details
   useEffect(() => {
     const initAppData = async () => {
+      // Fetch DB connection health
+      await refreshHealth();
+
       // 1. Fetch products from live backend
       try {
         setProductsLoading(true);
@@ -415,26 +461,42 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         // 3. Sync orders for active session from DB
-        try {
-          const ordRes = await fetch('/api/orders', {
-            headers: { 'Authorization': `Bearer ${token}` }
-          });
-          if (ordRes.ok) {
-            const apiOrders = await ordRes.json();
-            if (Array.isArray(apiOrders)) {
-              setOrders(apiOrders);
-            }
-          }
-        } catch (err) {
-          console.warn('Backend orders sync failed.', err);
-        }
+        await refreshOrders();
       }
     };
 
     initAppData();
   }, [token]);
 
-  // Refresh products from live server
+  // Real-time background sync loop (polling database values every 8 seconds)
+  useEffect(() => {
+    const intervalId = setInterval(async () => {
+      // Sync products, orders and backend connection health in background
+      try {
+        await refreshHealth();
+        
+        // Fetch products
+        const res = await fetch('/api/products');
+        if (res.ok) {
+          const apiProducts = await res.json();
+          if (Array.isArray(apiProducts) && apiProducts.length > 0) {
+            setProducts(apiProducts);
+          }
+        }
+
+        // If authenticated, also sync orders
+        if (token) {
+          await refreshOrders();
+        }
+      } catch (err) {
+        console.warn('Background dynamic polling sync encountered a minor mismatch.', err);
+      }
+    }, 8000);
+
+    return () => clearInterval(intervalId);
+  }, [token]);
+
+  // Refresh products from live server manually
   const refreshProducts = async () => {
     setProductsLoading(true);
     try {
@@ -1393,7 +1455,13 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
         updateProductAdmin,
         deleteProductAdmin,
         getAdminAnalytics,
-        getAdminEmailLogs
+        getAdminEmailLogs,
+
+        // Database health and synchronization
+        isMongoConnected,
+        dbDiagnostics,
+        refreshHealth,
+        refreshOrders
       }}
     >
       {children}

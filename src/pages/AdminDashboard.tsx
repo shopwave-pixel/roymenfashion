@@ -38,7 +38,10 @@ export const AdminDashboard: React.FC = () => {
     updateProductAdmin,
     deleteProductAdmin,
     getAdminEmailLogs,
-    addToast
+    addToast,
+    isMongoConnected,
+    dbDiagnostics,
+    refreshHealth
   } = useShop();
 
   const navigate = useNavigate();
@@ -303,6 +306,73 @@ export const AdminDashboard: React.FC = () => {
                 <h2 className="text-xl font-black uppercase tracking-widest pb-3 border-b text-black dark:text-white">
                   {getTranslatedText("Cockpit Management Reports", "ব্যবসায়িক ওভারভিউ ও অ্যানালিটিক্স")}
                 </h2>
+
+                {/* DATABASE DIAGNOSTICS & STATUS PANEL */}
+                <div className="border rounded-2xl p-5 bg-zinc-50 dark:bg-zinc-900/30 border-zinc-200 dark:border-zinc-800 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center space-x-3.5">
+                      <div className={`w-3.5 h-3.5 rounded-full relative flex items-center justify-center ${isMongoConnected ? 'bg-emerald-500' : 'bg-amber-500'}`}>
+                        <div className={`absolute w-full h-full rounded-full animate-ping opacity-75 ${isMongoConnected ? 'bg-emerald-400' : 'bg-amber-400'}`}></div>
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-black uppercase tracking-widest text-black dark:text-white">
+                          Real-time Database Integration Status
+                        </h3>
+                        <p className="text-[11px] font-mono text-zinc-500 dark:text-zinc-400">
+                          Current Source: <b className={isMongoConnected ? 'text-emerald-500' : 'text-amber-500 font-bold'}>{isMongoConnected ? 'MongoDB Atlas (Live Cloud)' : 'Local Sandboxed Fallback JSON Database'}</b>
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={async () => {
+                          await refreshHealth();
+                          addToast(getTranslatedText("Database handshake status refreshed!", "ডাটাবেজ কানেকশন স্ট্যাটাস রিফ্রেশ করা হয়েছে"), "info");
+                        }}
+                        className="py-1.5 px-3 border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-150 dark:hover:bg-zinc-800 text-[10px] font-black uppercase tracking-wider rounded font-mono active:scale-95 transition-all text-black dark:text-white"
+                      >
+                        ⚡ Re-Handshake Connection
+                      </button>
+                    </div>
+                  </div>
+
+                  {!isMongoConnected && (
+                    <div className="text-[11px] border border-dashed border-amber-500/30 bg-amber-500/5 p-4 rounded-xl space-y-3">
+                      <p className="font-bold text-amber-500 uppercase tracking-wide">
+                        ⚠️ Why am I seeing Sandbox Fallback database offline mode?
+                      </p>
+                      <p className="leading-relaxed text-zinc-650 dark:text-zinc-300">
+                        The Node.js server could not establish a connection to your MongoDB Atlas cluster within 5 seconds. To prevent the server from hanging or crashing, it dynamically activated the high-performance local file backup sandbox (<code className="bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 rounded text-red-500 font-mono">data/db.json</code>). While local fallback is fully functional for client testing, remote Atlas connection is required to sync global users and persistent live state.
+                      </p>
+                      
+                      <div className="pt-1.5 space-y-2">
+                        <p className="font-bold uppercase tracking-wider text-black dark:text-white">MongoDB Connect Checklist:</p>
+                        <ul className="list-decimal list-inside space-y-1.5 text-zinc-500 dark:text-zinc-450">
+                          <li>
+                            <span className="font-semibold text-black dark:text-zinc-300">Whitelist All IP Addresses (0.0.0.0/0)</span>: In your MongoDB Atlas Dashboard, go to <b className="text-zinc-700 dark:text-zinc-250">Network Access</b>, click <b className="text-zinc-700 dark:text-zinc-250">Add IP Address</b>, and insert <code className="bg-zinc-100 dark:bg-zinc-800 px-1 font-bold">0.0.0.0/0</code>. Since serverless Cloud containers utilize dynamic rotating IPs, whitelist is mandatory.
+                          </li>
+                          <li>
+                            <span className="font-semibold text-black dark:text-zinc-300">Set Environment Variables</span>: Navigate to your sandbox secrets configuration, and define the environment variable <code className="bg-zinc-100 dark:bg-zinc-800 px-1 font-bold">MONGO_URI</code> with your MongoDB connection string (e.g. <code className="text-xs">mongodb+srv://&lt;user&gt;:&lt;pwd&gt;@cluster.mongodb.net/roymen</code>).
+                          </li>
+                          <li>
+                            <span className="font-semibold text-black dark:text-zinc-300">Restart Dev Server</span>: Click the <b className="text-zinc-700 dark:text-zinc-250">"Restart Dev Server"</b> button or trigger a server save to boot your server and establish a secure live link.
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  )}
+
+                  {isMongoConnected && (
+                    <div className="text-[11px] border border-emerald-500/20 bg-emerald-500/5 p-4 rounded-xl text-zinc-650 dark:text-zinc-300">
+                      <p className="font-bold text-emerald-500 uppercase tracking-wide mb-1">
+                        ✓ Live Database Status: Active
+                      </p>
+                      <p className="leading-relaxed">
+                        Security link is established, database schemas validated, and automatic 8-second polling is running to keep products, orders, and receipts synchronized in real-time between administrators and active clients.
+                      </p>
+                    </div>
+                  )}
+                </div>
 
                 {loadingAnalytics ? (
                   <div className="py-20 text-center font-mono text-zinc-500 bg-zinc-50 dark:bg-zinc-900 rounded-xl">

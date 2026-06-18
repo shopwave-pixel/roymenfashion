@@ -84,7 +84,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         </div>
 
         {/* Absolute Functional Actions on Hover */}
-        <div className="absolute top-3 right-3 flex flex-col gap-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <div className="absolute top-3 right-3 flex flex-col gap-2 z-10 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity duration-300">
           {/* Wishlist button */}
           <button
             id={`wishlist-btn-${product.id}`}
@@ -115,7 +115,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
 
         {/* Overlay Action Banner standard */}
         {product.inStock && (
-          <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300">
+          <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/60 to-transparent opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all duration-300">
             {sizeSelectorOpen ? (
               <div className="bg-white dark:bg-zinc-950 p-2 rounded shadow-lg">
                 <p className="text-[10px] uppercase tracking-wider font-extrabold text-zinc-500 dark:text-zinc-400 text-center mb-1.5">
@@ -137,7 +137,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               <button
                 id={`add-to-cart-${product.id}`}
                 onClick={handleQuickAdd}
-                className="w-full py-2 px-3 bg-white text-black active:bg-zinc-100 font-bold uppercase tracking-wider text-[11px] flex items-center justify-center space-x-1.5 rounded transition-transform transform translate-y-2 group-hover:translate-y-0"
+                className="w-full py-2 px-3 bg-white text-black active:bg-zinc-100 font-bold uppercase tracking-wider text-[11px] flex items-center justify-center space-x-1.5 rounded transition-transform transform translate-y-0 lg:translate-y-2 lg:group-hover:translate-y-0"
               >
                 <ShoppingBag size={13} />
                 <span>{getTranslatedText("Quick Purchase", "কার্টে যোগ করুন")}</span>

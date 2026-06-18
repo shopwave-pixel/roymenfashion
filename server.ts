@@ -377,6 +377,19 @@ const adminOnly = (req: express.Request & { user?: any }, res: express.Response,
 // API ENDPOINTS
 // ------------------------------------------------------------------
 
+// ⚠️ SYSTEM HEALTH & DATABASE DIAGNOSTICS
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    isMongoConnected,
+    databaseType: isMongoConnected ? 'MongoDB Atlas (Cloud)' : 'Local File JSON DB (Sandbox Local Fallback)',
+    envVars: {
+      MONGO_URI_CONFIGURED: !!process.env.MONGO_URI,
+      MONGODB_URI_CONFIGURED: !!process.env.MONGODB_URI
+    }
+  });
+});
+
 // ⚠️ REGISTER USER
 app.post('/api/auth/register', async (req, res) => {
   const { name, email, password } = req.body;
