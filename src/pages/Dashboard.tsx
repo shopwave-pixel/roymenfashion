@@ -33,12 +33,14 @@ export const Dashboard: React.FC = () => {
 
   const navigate = useNavigate();
 
-  // Redirect to login if user session is void
+  // Redirect to login if user session is void, or to admin cockpit if user is admin
   useEffect(() => {
     if (!token) {
       navigate('/login');
+    } else if (user && user.role === 'admin') {
+      navigate('/admin-dashboard', { replace: true });
     }
-  }, [token, navigate]);
+  }, [token, user, navigate]);
 
   const [activeTab, setActiveTab] = useState<'orders' | 'profile' | 'addresses'>('orders');
   const [orders, setOrders] = useState<any[]>([]);
