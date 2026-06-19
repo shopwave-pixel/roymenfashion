@@ -264,15 +264,49 @@ const saveLocalDB = (data: LocalDB) => {
 
 // Initialize connection logic
 const connectDB = async () => {
+  console.log('==================================================================');
+  console.log('[DEVOPS DIAGNOSTICS] Initializing Database Probe...');
+  
   if (MONGO_URI) {
+    // 1. Sanitize and print connect-string parameters
+    let sanitizedUri = 'EMPTY';
+    try {
+      if (MONGO_URI.startsWith('mongodb://') || MONGO_URI.startsWith('mongodb+srv://')) {
+        const urlObj = new URL(MONGO_URI);
+        if (urlObj.password) {
+          urlObj.password = '********';
+        }
+        sanitizedUri = urlObj.toString();
+      } else {
+        // Simple manual cleaning if connection string does not register as standard HTTP/WS URL
+        sanitizedUri = MONGO_URI.replace(/:([^@]+)@/, ':********@');
+      }
+    } catch (uriCleanErr) {
+      sanitizedUri = MONGO_URI.substring(0, 25) + '... (obscured password)';
+    }
+
+    console.log(`[DEVOPS DIAGNOSTICS] Variable Found: Yes`);
+    console.log(`[DEVOPS DIAGNOSTICS] Connection String Length: ${MONGO_URI.length} characters`);
+    console.log(`[DEVOPS DIAGNOSTICS] Sanitized Connection String: ${sanitizedUri}`);
+    
+    // Warn if connection string is suspicious
+    if (!MONGO_URI.startsWith('mongodb://') && !MONGO_URI.startsWith('mongodb+srv://')) {
+      console.warn('[DEVOPS WARN] MONGO_URI does not start with standard database protocols (mongodb:// or mongodb+srv://). This could trigger parsing failures.');
+    }
+    
     try {
       mongoose.set('strictQuery', false);
+      
+      console.log('[DEVOPS DIAGNOSTICS] Executing connection handshake with MongoDB Atlas...');
       // Fail fast within 5000ms instead of hanging for 30s during container cold-start if IP is not whitelisted
       await mongoose.connect(MONGO_URI, {
-        serverSelectionTimeoutMS: 5000
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 10000,
       });
+      
       isMongoConnected = true;
       console.log('[ROYMEN] MongoDB Database successfully linked.');
+      console.log('==================================================================');
       
       // Seed initial products to MongoDB if empty
       const prodCount = await ProductModel.countDocuments();
@@ -296,11 +330,44 @@ const connectDB = async () => {
         console.log('[ROYMEN] Seeded default administrator login: admin@roymen.com / admin');
       }
     } catch (err: any) {
-      console.warn('[ROYMEN INFO] MongoDB is currently offline or unreachable. Activating dynamic local storage fallback mode (all features are 100% fully functional).');
       isMongoConnected = false;
+      console.error('==================================================================');
+      console.error('[CRITICAL DEVOPS ERROR] MongoDB Connection Handshake Failed!');
+      console.error(`[CRITICAL DEVOPS ERROR] Error Type: ${err?.name || 'Unknown Error Type'}`);
+      console.error(`[CRITICAL DEVOPS ERROR] Error Message: ${err?.message || 'No Error Message Provided'}`);
+      console.error(`[CRITICAL DEVOPS ERROR] Error Code: ${err?.code || 'N/A'}`);
+      
+      if (err?.stack) {
+        console.error(`[CRITICAL DEVOPS ERROR] Full stack trace:\n${err.stack}`);
+      }
+      
+      console.error('------------------------------------------------------------------');
+      console.error('[ROYMEN DIAGNOSIS] Automated connection bottleneck analysis:');
+      
+      const errMsgStr = String(err?.message || '');
+      
+      if (errMsgStr.includes('serverSelectionTimeoutMS') || errMsgStr.includes('timeout') || err?.name === 'MongoServerSelectionError') {
+        console.error('🔴 ROOT CAUSE ESTIMATE: Network timeout (MongoDB Atlas Firewall Block).');
+        console.error('👉 HOW TO SOLVE: Go to MongoDB Atlas Console -> Network Access -> Add IP Address.');
+        console.error('👉 Ensure you add "0.0.0.0/0" to whitelist all public incoming Docker container threads. Do NOT use standard home IPs because serverless containers continuously rotate system IPs.');
+      } else if (errMsgStr.includes('Authentication failed') || errMsgStr.includes('bad auth') || err?.code === 18) {
+        console.error('🔴 ROOT CAUSE ESTIMATE: Database user authentication failed.');
+        console.error('👉 HOW TO SOLVE: Double check username and password inside connection string.');
+        console.error('👉 NOTICE: If the database password contains special characters (e.g. @, :, #, ?), you MUST url-encode them (e.g. @ replaces with %40, # replaces with %23).');
+      } else if (errMsgStr.includes('ENOTFOUND') || errMsgStr.includes('querySrv')) {
+        console.error('🔴 ROOT CAUSE ESTIMATE: DNS SRV record lookup failed.');
+        console.error('👉 HOW TO SOLVE: Verify the domain structure in the connection string. Using an older connection format like (mongodb://) instead of (mongodb+srv://) might resolve DNS issues in some Node environments.');
+      } else {
+        console.error('🔴 ROOT CAUSE ESTIMATE: Unclassified Mongoose system mismatch.');
+        console.error('👉 HOW TO SOLVE: Check if MONGO_URI is wrapped in misplaced quotes in Railway dashboard settings.');
+      }
+      
+      console.warn('\n[ROYMEN INFO] Activating dynamic local storage fallback mode (all features are 100% fully functional locally using JSON backup database).');
+      console.error('==================================================================');
       loadLocalDB();
     }
   } else {
+    console.log('[DEVOPS DIAGNOSTICS] Variable Found: No');
     console.log('[ROYMEN] No MONGO_URI variable detected. Booting JSON Local Storage fallback database.');
     isMongoConnected = false;
     loadLocalDB();
