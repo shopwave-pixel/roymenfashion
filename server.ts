@@ -99,7 +99,7 @@ const ProductSchema = new mongoose.Schema({
     comment: String,
     date: String
   }]
-});
+}, { suppressReservedKeysWarning: true });
 
 const OrderSchema = new mongoose.Schema({
   id: { type: String, required: true, unique: true },
