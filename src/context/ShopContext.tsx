@@ -92,8 +92,15 @@ const getApiBase = (): string => {
 
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
-    // Smart deployment bridge: If running on netlify, automatically route to Railway backend!
-    if (host.includes('netlify.app') || host.includes('roymenfashion.netlify.app')) {
+    // Smart deployment bridge: If running on netlify or vercel, automatically route to Railway backend!
+    if (
+      host.includes('netlify.app') || 
+      host.includes('vercel.app') || 
+      host.includes('roymenfashion')
+    ) {
+      if (host.includes('roymenfashion-production.up.railway.app')) {
+        return '';
+      }
       return 'https://roymenfashion-production.up.railway.app';
     }
   }

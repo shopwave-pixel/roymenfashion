@@ -267,35 +267,117 @@ const saveLocalDB = (data: LocalDB) => {
   fs.writeFileSync(FILE_DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
 };
 
+// Auto-repair and URL-encode special characters in the MongoDB password to prevent bad auth / auth failed errors
+const autoEncodeMongoUri = (uri: string): string => {
+  if (!uri) return uri;
+  
+  // Clean whitespaces or leading/trailing quotes
+  let cleaned = uri.trim();
+  if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  if (cleaned.startsWith("'") && cleaned.endsWith("'")) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+
+  // Find the last index of '@' which separates credentials from the host
+  const lastAtIndex = cleaned.lastIndexOf('@');
+  if (lastAtIndex === -1) {
+    console.log('[DEVOPS REPAIR] No "@" symbol found in the connection string. Unable to isolate credentials.');
+    return cleaned;
+  }
+  
+  // Protocol is at the start
+  const protocolMatch = cleaned.match(/^(mongodb(?:\+srv)?:\/\/)/i);
+  if (!protocolMatch) {
+    console.log('[DEVOPS REPAIR] Connection string does not match standard mongodb protocol prefix.');
+    return cleaned;
+  }
+  
+  const protocol = protocolMatch[1];
+  const credentialStart = protocol.length;
+  
+  // Extract credential block (username:password)
+  const credentialsPart = cleaned.substring(credentialStart, lastAtIndex);
+  
+  // Extract host & options part
+  const hostPart = cleaned.substring(lastAtIndex + 1);
+  
+  // Split credentials by the first colon ':' to separate username and password
+  const firstColonIndex = credentialsPart.indexOf(':');
+  if (firstColonIndex === -1) {
+    console.log('[DEVOPS REPAIR] No password/colon separating character found in credential block.');
+    return cleaned; // No password found or username-only
+  }
+  
+  const username = credentialsPart.substring(0, firstColonIndex);
+  const rawPassword = credentialsPart.substring(firstColonIndex + 1);
+  
+  // If the password contains '<db_password>' or '<password>', it is a placeholder. Keep it as is so warnings trigger.
+  if (rawPassword.includes('<password>') || rawPassword.includes('<db_password>') || rawPassword.includes('<password_here>')) {
+    console.warn('[DEVOPS REPAIR] WARNING: The password contains a literal placeholder sequence. Bypassing URL encoding.');
+    return cleaned;
+  }
+  
+  let safePassword = rawPassword;
+  try {
+    // Fully decode first to avoid double encoding if it was already partially/fully encoded
+    const fullyDecoded = decodeURIComponent(rawPassword);
+    safePassword = encodeURIComponent(fullyDecoded);
+    
+    if (safePassword !== rawPassword) {
+      console.log('[DEVOPS REPAIR] SUCCESSFULLY REPAIRED: Detected and URL-encoded unescaped special characters in MongoDB database password.');
+    }
+  } catch (err) {
+    // If decoding failed (e.g. malformed percent-encoding), it is definitely not encoded. Encode it directly.
+    safePassword = encodeURIComponent(rawPassword);
+    console.log('[DEVOPS REPAIR] SUCCESSFULLY REPAIRED: MongoDB password was not URL-safe and contained unescaped characters. Encoded successfully.');
+  }
+  
+  // Reconstruct URI
+  const reconstructed = `${protocol}${username}:${safePassword}@${hostPart}`;
+  return reconstructed;
+};
+
 // Initialize connection logic
 const connectDB = async () => {
   console.log('==================================================================');
   console.log('[DEVOPS DIAGNOSTICS] Initializing Database Probe...');
   
-  if (MONGO_URI) {
+  const activeMongoUri = autoEncodeMongoUri(MONGO_URI);
+  
+  if (activeMongoUri) {
     // 1. Sanitize and print connect-string parameters
     let sanitizedUri = 'EMPTY';
     try {
-      if (MONGO_URI.startsWith('mongodb://') || MONGO_URI.startsWith('mongodb+srv://')) {
-        const urlObj = new URL(MONGO_URI);
+      if (activeMongoUri.startsWith('mongodb://') || activeMongoUri.startsWith('mongodb+srv://')) {
+        const urlObj = new URL(activeMongoUri);
         if (urlObj.password) {
           urlObj.password = '********';
         }
         sanitizedUri = urlObj.toString();
       } else {
         // Simple manual cleaning if connection string does not register as standard HTTP/WS URL
-        sanitizedUri = MONGO_URI.replace(/:([^@]+)@/, ':********@');
+        sanitizedUri = activeMongoUri.replace(/:([^@]+)@/, ':********@');
       }
     } catch (uriCleanErr) {
-      sanitizedUri = MONGO_URI.substring(0, 25) + '... (obscured password)';
+      sanitizedUri = activeMongoUri.substring(0, 25) + '... (obscured password)';
     }
 
     console.log(`[DEVOPS DIAGNOSTICS] Variable Found: Yes`);
-    console.log(`[DEVOPS DIAGNOSTICS] Connection String Length: ${MONGO_URI.length} characters`);
+    console.log(`[DEVOPS DIAGNOSTICS] Connection String Length: ${activeMongoUri.length} characters`);
     console.log(`[DEVOPS DIAGNOSTICS] Sanitized Connection String: ${sanitizedUri}`);
     
+    // Check for standard password placeholder leakage
+    if (activeMongoUri.includes('<username>') || activeMongoUri.includes('<password>') || activeMongoUri.includes('<db_password>') || activeMongoUri.includes('<password_here>') || activeMongoUri.includes('<user>') || activeMongoUri.includes('xxxxx')) {
+      console.warn('==================================================================');
+      console.warn('[DEVOPS CRITICAL WARNING] Your MONGO_URI still contains literal placeholder values like "<username>", "<db_password>", "<password>" or "xxxxx".');
+      console.warn('👉 Please configure your actual MongoDB Atlas database credentials in your Railway Environment Variables!');
+      console.warn('==================================================================');
+    }
+
     // Warn if connection string is suspicious
-    if (!MONGO_URI.startsWith('mongodb://') && !MONGO_URI.startsWith('mongodb+srv://')) {
+    if (!activeMongoUri.startsWith('mongodb://') && !activeMongoUri.startsWith('mongodb+srv://')) {
       console.warn('[DEVOPS WARN] MONGO_URI does not start with standard database protocols (mongodb:// or mongodb+srv://). This could trigger parsing failures.');
     }
     
@@ -303,10 +385,10 @@ const connectDB = async () => {
       mongoose.set('strictQuery', false);
       
       console.log('[DEVOPS DIAGNOSTICS] Executing connection handshake with MongoDB Atlas...');
-      // Fail fast within 5000ms instead of hanging for 30s during container cold-start if IP is not whitelisted
-      await mongoose.connect(MONGO_URI, {
-        serverSelectionTimeoutMS: 5000,
-        connectTimeoutMS: 10000,
+      // Increased select and connect timeout to 30000ms (30s) to survive slower serverless cold-starts & DNS lookup latencies on Railway
+      await mongoose.connect(activeMongoUri, {
+        serverSelectionTimeoutMS: 30000,
+        connectTimeoutMS: 30000,
       });
       
       isMongoConnected = true;
