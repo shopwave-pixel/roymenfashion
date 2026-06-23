@@ -30,9 +30,10 @@ if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && proce
 
 const app = express();
 
-// Enable CORS for external frontend applications (e.g. Vercel deployment)
+// Enable CORS for external frontend applications (e.g. Vercel & Netlify deployment)
 const allowedOrigins = [
   'https://roymen-frontend.vercel.app',
+  'https://roymenfashion.netlify.app',
   'http://localhost:5173',
   'http://localhost:3000'
 ];
@@ -41,7 +42,11 @@ app.use(cors({
   origin: (origin, callback) => {
     // allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1 || origin.endsWith('.vercel.app')) {
+    if (
+      allowedOrigins.indexOf(origin) !== -1 || 
+      origin.endsWith('.vercel.app') || 
+      origin.endsWith('.netlify.app')
+    ) {
       return callback(null, true);
     }
     // Fallback: allow for development/ease but log warning
@@ -651,8 +656,14 @@ app.put('/api/auth/address', authenticateToken, async (req: express.Request & { 
 
 // ⚠️ RETRIEVE CATALOG PRODUCTS
 app.get('/api/products', async (req, res) => {
+  const forceReset = req.query.force_reset === 'true';
   if (isMongoConnected) {
     try {
+      if (forceReset) {
+        await ProductModel.deleteMany({});
+        await ProductModel.insertMany(localInitialProducts);
+        console.log('[ROYMEN] Force reseeded initial products catalogue into MongoDB collection.');
+      }
       const catalog = await ProductModel.find({});
       res.json(catalog);
     } catch (err) {
@@ -660,7 +671,46 @@ app.get('/api/products', async (req, res) => {
     }
   } else {
     const db = loadLocalDB();
+    if (forceReset) {
+      db.products = localInitialProducts;
+      saveLocalDB(db);
+      console.log('[ROYMEN] Force reseeded initial products catalogue into local JSON.');
+    }
     res.json(db.products);
+  }
+});
+
+// ⚠️ GLOBAL PRODUCT DATABASE RE-SEED & PURGE (EASY RECOVERY FOR PRODUCTION NETLIFY/RAILWAY ALIGNMENT)
+app.all('/api/products/reset-db', async (req, res) => {
+  try {
+    if (isMongoConnected) {
+      await ProductModel.deleteMany({});
+      const seeded = await ProductModel.insertMany(localInitialProducts);
+      res.json({
+        success: true,
+        message: 'Successfully purged and re-seeded MongoDB products catalog with production JSON data!',
+        count: seeded.length,
+        isMongoConnected: true,
+        database: 'MongoDB Atlas'
+      });
+    } else {
+      const db = loadLocalDB();
+      db.products = localInitialProducts;
+      saveLocalDB(db);
+      res.json({
+        success: true,
+        message: 'Successfully purged and re-seeded Local JSON database with production products list!',
+        count: localInitialProducts.length,
+        isMongoConnected: false,
+        database: 'Local File JSON DB'
+      });
+    }
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      message: 'Failed to purge or re-seed products database catalogs.',
+      error: err?.message || String(err)
+    });
   }
 });
 

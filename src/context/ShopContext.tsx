@@ -86,7 +86,21 @@ const ShopContext = createContext<ShopContextType | undefined>(undefined);
 // This transparently intercepts relative '/api/*' fetches in the frontend 
 // and routes them to a custom VITE_API_URL if configured, preventing 
 // CORS mismatches or Netlify SPA catch-all redirect failures.
-const API_BASE = ((import.meta as any).env?.VITE_API_URL || '').replace(/\/$/, '');
+const getApiBase = (): string => {
+  const envUrl = ((import.meta as any).env?.VITE_API_URL || '').replace(/\/$/, '');
+  if (envUrl) return envUrl;
+
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    // Smart deployment bridge: If running on netlify, automatically route to Railway backend!
+    if (host.includes('netlify.app') || host.includes('roymenfashion.netlify.app')) {
+      return 'https://roymenfashion-production.up.railway.app';
+    }
+  }
+  return '';
+};
+
+const API_BASE = getApiBase();
 
 // Module-level safe fetch wrapper to point api calls to the production remote server if configured
 const fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
