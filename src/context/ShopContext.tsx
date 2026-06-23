@@ -101,23 +101,15 @@ const getApiBase = (): string => {
     const isVercel = host.includes('vercel.app');
     const isNetlify = host.includes('netlify.app');
     const isRailway = host.includes('roymenfashion-production.up.railway.app');
-    
-    const isLocalhost = 
-      host === 'localhost' || 
-      host === '127.0.0.1' || 
-      host.startsWith('192.168.') || 
-      host.startsWith('10.') || 
-      host.startsWith('172.');
 
-    const isAiStudio = 
-      host.includes('ais-dev-') || 
-      host.includes('ais-pre-');
-
-    if (isVercel || isNetlify || isRailway || isLocalhost || isAiStudio) {
+    // For deployed production frontends (Vercel, Netlify) or running on Railway itself,
+    // we use relative paths ('/api/*') to let the server proxy or same-origin resolve properly.
+    if (isVercel || isNetlify || isRailway) {
       return '';
     }
 
-    // Default fallback for any other unclassified domain (points directly to Railway)
+    // For the AI Studio development sandbox, localhost, or any other domain,
+    // point directly to the live production Railway backend to enable real-time database sync!
     return 'https://roymenfashion-production.up.railway.app';
   }
   return '';
