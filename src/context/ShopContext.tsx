@@ -92,17 +92,33 @@ const getApiBase = (): string => {
 
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
-    // Smart deployment bridge: If running on netlify or vercel, automatically route to Railway backend!
-    if (
-      host.includes('netlify.app') || 
-      host.includes('vercel.app') || 
-      host.includes('roymenfashion')
-    ) {
-      if (host.includes('roymenfashion-production.up.railway.app')) {
-        return '';
-      }
-      return 'https://roymenfashion-production.up.railway.app';
+    
+    // Explicitly check for known deployment platforms, local environments, and AI Studio sandboxes.
+    // When running on these, we leverage relative paths ('/api/*') because:
+    // - On Vercel: vercel.json transparently proxies /api/* to Railway under the hood.
+    // - On Netlify: netlify.toml transparently proxies /api/* to Railway under the hood.
+    // - On local dev & Railway: the client and server share the same origin, so relative path works.
+    const isVercel = host.includes('vercel.app');
+    const isNetlify = host.includes('netlify.app');
+    const isRailway = host.includes('roymenfashion-production.up.railway.app');
+    
+    const isLocalhost = 
+      host === 'localhost' || 
+      host === '127.0.0.1' || 
+      host.startsWith('192.168.') || 
+      host.startsWith('10.') || 
+      host.startsWith('172.');
+
+    const isAiStudio = 
+      host.includes('ais-dev-') || 
+      host.includes('ais-pre-');
+
+    if (isVercel || isNetlify || isRailway || isLocalhost || isAiStudio) {
+      return '';
     }
+
+    // Default fallback for any other unclassified domain (points directly to Railway)
+    return 'https://roymenfashion-production.up.railway.app';
   }
   return '';
 };
