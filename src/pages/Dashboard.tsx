@@ -183,10 +183,10 @@ export const Dashboard: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* Navigation drawer links sidebar (col: 3) */}
-          <aside className="lg:col-span-3 space-y-2 border border-zinc-150 dark:border-zinc-850 p-4 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/30">
+          <aside className="lg:col-span-3 flex lg:flex-col overflow-x-auto lg:overflow-x-visible space-x-2 lg:space-x-0 lg:space-y-2 p-4 border border-zinc-150 dark:border-zinc-850 rounded-xl bg-zinc-50/50 dark:bg-zinc-900/30 whitespace-nowrap scrollbar-none">
             <button
               onClick={() => setActiveTab('orders')}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded text-xs font-black uppercase tracking-wider text-left transition-all ${
+              className={`flex-1 lg:w-full flex items-center space-x-3 px-4 py-3 rounded text-xs font-black uppercase tracking-wider text-left transition-all shrink-0 ${
                 activeTab === 'orders'
                   ? 'bg-black text-white dark:bg-white dark:text-black'
                   : 'hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-500 dark:text-zinc-400'
@@ -198,7 +198,7 @@ export const Dashboard: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('profile')}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded text-xs font-black uppercase tracking-wider text-left transition-all ${
+              className={`flex-1 lg:w-full flex items-center space-x-3 px-4 py-3 rounded text-xs font-black uppercase tracking-wider text-left transition-all shrink-0 ${
                 activeTab === 'profile'
                   ? 'bg-black text-white dark:bg-white dark:text-black'
                   : 'hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-500 dark:text-zinc-400'
@@ -210,7 +210,7 @@ export const Dashboard: React.FC = () => {
 
             <button
               onClick={() => setActiveTab('addresses')}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded text-xs font-black uppercase tracking-wider text-left transition-all ${
+              className={`flex-1 lg:w-full flex items-center space-x-3 px-4 py-3 rounded text-xs font-black uppercase tracking-wider text-left transition-all shrink-0 ${
                 activeTab === 'addresses'
                   ? 'bg-black text-white dark:bg-white dark:text-black'
                   : 'hover:bg-zinc-100 dark:hover:bg-zinc-900 text-zinc-500 dark:text-zinc-400'
@@ -220,7 +220,7 @@ export const Dashboard: React.FC = () => {
               <span>{getTranslatedText("Dispatch Addresses", "ডেলিভারি ঠিকানা সমূহ")}</span>
             </button>
 
-            <div className="border-t border-zinc-200 dark:border-zinc-800 my-4 pt-4 text-center">
+            <div className="hidden lg:block border-t border-zinc-200 dark:border-zinc-800 my-4 pt-4 text-center">
               <Link to="/shop" className="text-xs text-yellow-600 dark:text-yellow-500 hover:underline inline-flex items-center font-bold uppercase tracking-widest">
                 <span>{getTranslatedText("Catalog Closet", "শপ গ্যালারি")}</span>
                 <ArrowRight size={12} className="ml-1" />

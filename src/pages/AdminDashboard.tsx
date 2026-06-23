@@ -275,7 +275,7 @@ export const AdminDashboard: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* Navigation rail for administrative tabs */}
-          <nav className="lg:col-span-3 space-y-2 border border-zinc-150 dark:border-zinc-850 p-4 rounded-xl bg-zinc-50 dark:bg-zinc-900/30">
+          <nav className="lg:col-span-3 flex lg:flex-col overflow-x-auto lg:overflow-x-visible space-x-2 lg:space-x-0 lg:space-y-2 p-4 border border-zinc-150 dark:border-zinc-850 rounded-xl bg-zinc-50 dark:bg-zinc-900/30 whitespace-nowrap scrollbar-none">
             {[
               { id: 'analytics', label: 'Operational Analytics', icon: TrendUpIcon },
               { id: 'products', label: 'Wardrobe Catalog', icon: PackIcon },
@@ -285,7 +285,7 @@ export const AdminDashboard: React.FC = () => {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded text-xs font-black uppercase tracking-wider text-left transition-all ${
+                className={`flex-1 lg:w-full flex items-center space-x-3 px-4 py-3 rounded text-xs font-black uppercase tracking-wider text-left transition-all shrink-0 ${
                   activeTab === tab.id
                     ? 'bg-black text-white dark:bg-white dark:text-black'
                     : 'hover:bg-zinc-150 dark:hover:bg-zinc-800 text-zinc-500 dark:text-zinc-400'

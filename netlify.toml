@@ -8,6 +8,12 @@
   SECRETS_SCAN_OMIT_KEYS = "CLOUDINARY_API_KEY,CLOUDINARY_API_SECRET,MONGODB_URI,MONGO_URI,JWT_SECRET,GEMINI_API_KEY"
 
 [[redirects]]
+  from = "/api/*"
+  to = "https://roymenfashion-production.up.railway.app/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
