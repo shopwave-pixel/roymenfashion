@@ -21,7 +21,8 @@ import {
   HeartHandshake,
   UploadCloud,
   Image as ImageIcon,
-  Mail
+  Mail,
+  LogOut
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
@@ -41,7 +42,8 @@ export const AdminDashboard: React.FC = () => {
     addToast,
     isMongoConnected,
     dbDiagnostics,
-    refreshHealth
+    refreshHealth,
+    logoutUser
   } = useShop();
 
   const navigate = useNavigate();
@@ -55,6 +57,17 @@ export const AdminDashboard: React.FC = () => {
       navigate('/dashboard');
     }
   }, [token, user, navigate]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("roymen_token");
+    localStorage.removeItem("roymen_user");
+    localStorage.removeItem("token");
+    localStorage.removeItem("admin");
+    localStorage.removeItem("user");
+    sessionStorage.clear();
+    logoutUser();
+    navigate("/login");
+  };
 
   const [activeTab, setActiveTab] = useState<'analytics' | 'products' | 'orders' | 'emails'>('analytics');
   
@@ -266,10 +279,11 @@ export const AdminDashboard: React.FC = () => {
             </p>
           </div>
           <button
-            onClick={() => navigate('/dashboard')}
-            className="px-6 py-3 border border-yellow-600 hover:bg-yellow-600/10 text-yellow-500 text-xs font-black uppercase tracking-widest rounded transition-all"
+            onClick={handleLogout}
+            className="px-6 py-3 bg-yellow-500 hover:bg-yellow-600 text-black text-xs font-black uppercase tracking-widest rounded transition-all flex items-center space-x-2 shadow-lg shadow-yellow-500/10 hover:shadow-yellow-500/20"
           >
-            {getTranslatedText("Back User Desk", "গ্রাহক ড্যাশবোর্ড")}
+            <LogOut size={14} className="stroke-[2.5]" />
+            <span>{getTranslatedText("Logout", "লগআউট")}</span>
           </button>
         </div>
       </div>
@@ -560,6 +574,16 @@ export const AdminDashboard: React.FC = () => {
                           <div>
                             <p className="font-mono text-zinc-400 uppercase text-[10px]">RECIPIENT COORDINATE</p>
                             <span className="font-bold text-black dark:text-white capitalize">{o.billingDetails.name} (+88{o.billingDetails.phone})</span>
+                            <div className="mt-2 space-y-1.5 pt-1.5 border-t border-zinc-150 dark:border-zinc-850">
+                              <div>
+                                <span className="font-mono text-[9px] text-zinc-400 uppercase tracking-wider block">ADDRESS:</span>
+                                <span className="font-semibold text-zinc-800 dark:text-zinc-200 block text-[11px] leading-tight">{o.billingDetails.address}</span>
+                              </div>
+                              <div>
+                                <span className="font-mono text-[9px] text-zinc-400 uppercase tracking-wider block">DISTRICT:</span>
+                                <span className="font-semibold text-zinc-800 dark:text-zinc-200 block text-[11px] uppercase tracking-wider">{o.billingDetails.district}</span>
+                              </div>
+                            </div>
                           </div>
 
                           <div>
