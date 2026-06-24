@@ -84,40 +84,14 @@ const ShopContext = createContext<ShopContextType | undefined>(undefined);
 // GLOBAL API DEVOPS INTERCEPTOR FOR RAILWAY & NETLIFY COOPERATION
 // ------------------------------------------------------------------
 // This transparently intercepts relative '/api/*' fetches in the frontend 
-// and routes them to a custom VITE_API_URL if configured, preventing 
-// CORS mismatches or Netlify SPA catch-all redirect failures.
+// and routes them to a custom VITE_API_URL or the Railway production backend
+// when deployed on production hosts like Vercel or Netlify, while keeping
+// relative paths in local development and the AI Studio sandbox.
 const getApiBase = (): string => {
-  if (typeof window !== 'undefined') {
-    const host = window.location.hostname;
-    
-    const isVercel = host.includes('vercel.app');
-    const isNetlify = host.includes('netlify.app');
-    const isRailway = host.includes('roymenfashion-production.up.railway.app');
-    const isLocalhost = 
-      host === 'localhost' || 
-      host === '127.0.0.1' || 
-      host.startsWith('192.168.') || 
-      host.startsWith('10.') || 
-      host.startsWith('172.');
-    const isAiStudio = 
-      host.includes('ais-dev-') || 
-      host.includes('ais-pre-');
-
-    // For deployed production frontends (Vercel, Netlify) or running on Railway itself,
-    // or when in local development/AI Studio sandbox, we use relative paths ('/api/*').
-    // This allows:
-    // 1. Local/AI Studio: Connects with the fully featured container backend.
-    // 2. Vercel/Netlify: Routes transparently via build-in proxy rewrite engines to the production DB.
-    if (isLocalhost || isAiStudio || isVercel || isNetlify || isRailway) {
-      return '';
-    }
-  }
-
-  // Fallback to custom VITE_API_URL environment variable if configured (e.g. for custom domains)
+  // 1. Try to use explicit VITE_API_URL environment variable first
   let envUrl = ((import.meta as any).env?.VITE_API_URL || '').trim();
   
-  // Robustly extract the HTTP/HTTPS URL if the env variable value is malformed or copy-pasted with the key
-  // e.g. "VITE API URL=https://..." or "VITE_API_URL=https://..."
+  // Robustly extract the HTTP/HTTPS URL if the env variable value is malformed or copy-pasted
   const urlMatch = envUrl.match(/https?:\/\/[^\s"']+/);
   if (urlMatch) {
     envUrl = urlMatch[0];
@@ -130,8 +104,37 @@ const getApiBase = (): string => {
     return envUrl;
   }
 
-  // Final fallback to relative path
-  return '';
+  // 2. Fallback to dynamic host detection if no env var is set
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    
+    const isVercel = host.includes('vercel.app');
+    const isNetlify = host.includes('netlify.app');
+    
+    // Direct production frontends (Vercel, Netlify) to the Railway production backend URL
+    if (isVercel || isNetlify) {
+      return 'https://roymenfashion-production.up.railway.app';
+    }
+
+    const isRailway = host.includes('roymenfashion-production.up.railway.app');
+    const isLocalhost = 
+      host === 'localhost' || 
+      host === '127.0.0.1' || 
+      host.startsWith('192.168.') || 
+      host.startsWith('10.') || 
+      host.startsWith('172.');
+    const isAiStudio = 
+      host.includes('ais-dev-') || 
+      host.includes('ais-pre-');
+
+    // For local development, AI Studio sandbox, or running directly on Railway, use relative paths ('/api/*')
+    if (isLocalhost || isAiStudio || isRailway) {
+      return '';
+    }
+  }
+
+  // Final fallback to Railway production URL
+  return 'https://roymenfashion-production.up.railway.app';
 };
 
 const API_BASE = getApiBase();
