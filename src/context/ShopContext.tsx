@@ -87,7 +87,10 @@ const ShopContext = createContext<ShopContextType | undefined>(undefined);
 // and routes them to a custom VITE_API_URL if configured, preventing 
 // CORS mismatches or Netlify SPA catch-all redirect failures.
 const getApiBase = (): string => {
-  const envUrl = ((import.meta as any).env?.VITE_API_URL || '').replace(/\/$/, '');
+  const envUrl = ((import.meta as any).env?.VITE_API_URL || '')
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/\/$/, '');
   if (envUrl) return envUrl;
 
   if (typeof window !== 'undefined') {

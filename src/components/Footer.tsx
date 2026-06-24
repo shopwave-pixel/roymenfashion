@@ -165,24 +165,7 @@ export const Footer: React.FC = () => {
         {/* Footer Base Credits & Badges */}
         <div className="pt-8 flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="text-center md:text-left text-xs text-zinc-650">
-            <p>© {currentYear} ROYMEN Bangladesh. {getTranslatedText("All Rights Reserved. Engineered for excellence.", "সর্বস্বত্ব সংরক্ষিত।")}{" "}
-              <a 
-                href="https://roymenfashion-production.up.railway.app" 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="hover:text-white underline text-zinc-500 transition-colors"
-              >
-                roymenfashion-production.up.railway.app
-              </a>
-            </p>
-            <p className="mt-2 flex items-center justify-center md:justify-start gap-2 text-[10px] uppercase font-mono tracking-wider">
-              <span className={`inline-block w-2 h-2 rounded-full ${isMongoConnected ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]'}`}></span>
-              <span>
-                {isMongoConnected 
-                  ? getTranslatedText("Database: Connected (MongoDB Atlas)", "ডাটাবেজ: কানেক্টেড (মঙ্গোডিবি এটলাস)") 
-                  : getTranslatedText("Database: Sandbox Offline Fallback", "ডাটাবেজ: লোকাল ফাইল অফলাইন স্যান্ডবক্স")}
-              </span>
-            </p>
+            <p>© {currentYear} ROYMEN Bangladesh. {getTranslatedText("All Rights Reserved. Engineered for excellence.", "সর্বস্বত্ব সংরক্ষিত।")}</p>
           </div>
 
           {/* Bangladesh localized secure payment badging */}
