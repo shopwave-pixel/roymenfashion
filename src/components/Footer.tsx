@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { Facebook, Instagram, MapPin, Phone, Mail, ArrowRight } from 'lucide-react';
+import { RoyMenLogo } from './RoyMenLogo';
 
 const Tiktok: React.FC<{ size?: number; className?: string }> = ({ size = 18, className }) => (
   <svg
@@ -45,12 +46,9 @@ export const Footer: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 pb-16 border-b border-zinc-900">
           
           {/* Brand Intro Column */}
-          <div className="space-y-4">
-            <h2 className="text-xl font-black tracking-[0.25em] text-white">ROYMEN</h2>
-            <p className="text-xs uppercase tracking-[0.3em] font-medium text-zinc-500">
-              {getTranslatedText("Wear Confidence.", "নিজের উপর বিশ্বাস")}
-            </p>
-            <p className="text-sm leading-relaxed text-zinc-400 mt-4">
+          <div className="space-y-4 flex flex-col items-start text-left">
+            <RoyMenLogo size="sm" showTagline={true} light={true} className="items-start" />
+            <p className="text-sm leading-relaxed text-zinc-400 mt-4 text-left">
               {getTranslatedText(
                 "Curated premium menswear designed to inspire absolute elegance. Elevating Bangladesh's local sartorial aesthetic with premium global fabrics and flawless tailored fits.",
                 "বাঙালি লাইফস্টাইলের সাথে মিল রেখে ও আন্তর্জাতিক মানের প্রিমিয়াম কাপড়ে তৈরি রয়মেন পোশাক দিচ্ছে সম্পূর্ণ আরাম ও অতুলনীয় আত্মবিশ্বাস।"

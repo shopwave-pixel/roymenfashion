@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { Menu, X, ShoppingBag, Heart, Search, Moon, Sun, Globe, User } from 'lucide-react';
+import { RoyMenLogo } from './RoyMenLogo';
 
 interface NavbarProps {
   onOpenCart: () => void;
@@ -58,12 +59,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCart }) => {
           {/* Luxury Brand Logo */}
           <div className="flex-1 lg:flex-none text-center lg:text-left">
             <Link to="/" className="inline-block group">
-              <h1 className="text-2xl sm:text-3xl font-black tracking-[0.25em] text-black dark:text-white transition-colors">
-                ROYMEN
-              </h1>
-              <p className="text-[9px] sm:text-[10px] font-medium tracking-[0.4em] text-zinc-500 dark:text-zinc-400 text-center uppercase">
-                {getTranslatedText("Wear Confidence", "নিজের উপর বিশ্বাস")}
-              </p>
+              <RoyMenLogo size="sm" showTagline={true} className="items-center lg:items-start" />
             </Link>
           </div>
 
@@ -190,10 +186,9 @@ export const Navbar: React.FC<NavbarProps> = ({ onOpenCart }) => {
           <div className="fixed inset-y-0 left-0 w-full max-w-xs bg-white dark:bg-zinc-950 p-6 shadow-2xl flex flex-col justify-between transition-transform duration-300">
             <div>
               <div className="flex items-center justify-between pb-8 border-b border-zinc-100 dark:border-zinc-900">
-                <div className="text-left">
-                  <h2 className="text-xl font-black tracking-widest text-black dark:text-white">ROYMEN</h2>
-                  <p className="text-[8px] font-medium tracking-widest text-zinc-400 uppercase">WEAR CONFIDENCE</p>
-                </div>
+                <Link to="/" onClick={() => setMobileMenuOpen(false)} className="text-left block">
+                  <RoyMenLogo size="sm" showTagline={true} className="items-start" />
+                </Link>
                 <button
                   id="close-mobile-menu-btn"
                   onClick={() => setMobileMenuOpen(false)}
