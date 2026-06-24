@@ -1352,112 +1352,91 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const createNewProductAdmin = async (prodData: Partial<Product>): Promise<boolean> => {
-    if (token) {
-      try {
-        const res = await fetch('/api/products', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(prodData)
-        });
-        if (res.ok) {
-          const apiProduct = await res.json();
-          setProducts(prev => [apiProduct, ...prev]);
-          addToast(getTranslatedText("New catalog attire published on server!", "নতুন পোশাক কালেকশনে যোগ করা হয়েছে।"), "success");
-          return true;
-        }
-      } catch (err) {
-        console.warn("Server product creation failed.", err);
-      }
+    if (!token) {
+      addToast(getTranslatedText("Authentication token required. Please sign in.", "লগইন করা প্রয়োজন।"), "error");
+      return false;
     }
-
-    // --- LOCAL FALLBACK ---
-    const newProduct: Product = {
-      id: 'prod-' + Math.floor(1000 + Math.random() * 9000),
-      name: prodData.name || 'Sartorial Apparel',
-      description: prodData.description || '',
-      price: prodData.price || 1500,
-      category: prodData.category || 'New In',
-      images: prodData.images && prodData.images.length > 0 ? prodData.images : ['https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=600'],
-      sizes: prodData.sizes || ['S', 'M', 'L'],
-      colors: prodData.colors || ['Black'],
-      rating: 5.0,
-      reviewCount: 0,
-      inStock: prodData.inStock !== undefined ? prodData.inStock : true,
-      sku: prodData.sku || 'ROY-' + Math.floor(10000 + Math.random() * 90000),
-      details: prodData.details || ['Premium Fabrics', 'Sartorial Tailoring', 'Dry Clean Only']
-    };
-
-    setProducts(prev => [newProduct, ...prev]);
-    addToast(getTranslatedText("New catalog attire published!", "নতুন পোশাক কালেকশনে যোগ করা হয়েছে।"), "success");
-    return true;
+    try {
+      const res = await fetch('/api/products', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(prodData)
+      });
+      if (res.ok) {
+        const apiProduct = await res.json();
+        setProducts(prev => [apiProduct, ...prev]);
+        addToast(getTranslatedText("New catalog attire published on server successfully!", "নতুন পোশাক কালেকশনে যোগ করা হয়েছে।"), "success");
+        return true;
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        addToast(errData.message || getTranslatedText("Server product creation failed.", "তৈরি করতে ব্যর্থ হয়েছে"), "error");
+        return false;
+      }
+    } catch (err) {
+      console.error("Server product creation failed.", err);
+      addToast(getTranslatedText("Failed to establish server connection.", "সার্ভার কানেকশন ব্যর্থ হয়েছে"), "error");
+      return false;
+    }
   };
 
   const updateProductAdmin = async (productId: string, prodData: Partial<Product>): Promise<boolean> => {
-    if (token) {
-      try {
-        const res = await fetch(`/api/products/${productId}`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify(prodData)
-        });
-        if (res.ok) {
-          const apiProduct = await res.json();
-          setProducts(prev => prev.map(p => p.id === productId ? apiProduct : p));
-          addToast(getTranslatedText("Atelier attire layout customized on server!", "পোশাক সেটিংস সফলভাবে সেভ হয়েছে!"), "success");
-          return true;
-        }
-      } catch (err) {
-        console.warn("Server product update failed.", err);
-      }
+    if (!token) {
+      addToast(getTranslatedText("Authentication token required. Please sign in.", "লগইন করা প্রয়োজন।"), "error");
+      return false;
     }
-
-    // --- LOCAL FALLBACK ---
-    let success = false;
-    setProducts(prev => prev.map(p => {
-      if (p.id === productId) {
-        success = true;
-        return {
-          ...p,
-          ...prodData
-        };
+    try {
+      const res = await fetch(`/api/products/${productId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(prodData)
+      });
+      if (res.ok) {
+        const apiProduct = await res.json();
+        setProducts(prev => prev.map(p => p.id === productId ? apiProduct : p));
+        addToast(getTranslatedText("Atelier attire layout customized on server successfully!", "পোশাক সেটিংস সফলভাবে সেভ হয়েছে!"), "success");
+        return true;
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        addToast(errData.message || getTranslatedText("Server product update failed.", "আপডেট করতে ব্যর্থ হয়েছে"), "error");
+        return false;
       }
-      return p;
-    }));
-
-    if (success) {
-      addToast(getTranslatedText("Atelier attire layout customized!", "পোশাক সেটিংস সফলভাবে সেভ হয়েছে!"), "success");
-      return true;
+    } catch (err) {
+      console.error("Server product update failed.", err);
+      addToast(getTranslatedText("Failed to establish server connection.", "সার্ভার কানেকশন ব্যর্থ হয়েছে"), "error");
+      return false;
     }
-    return false;
   };
 
   const deleteProductAdmin = async (productId: string): Promise<boolean> => {
-    if (token) {
-      try {
-        const res = await fetch(`/api/products/${productId}`, {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          setProducts(prev => prev.filter(p => p.id !== productId));
-          addToast(getTranslatedText("Apparel deleted from server collection.", "পোশাকটি সফলভাবে ডিলিট করা হয়েছে"), "success");
-          return true;
-        }
-      } catch (err) {
-        console.warn("Server product deletion failed.", err);
-      }
+    if (!token) {
+      addToast(getTranslatedText("Authentication token required. Please sign in.", "লগইন করা প্রয়োজন।"), "error");
+      return false;
     }
-
-    // --- LOCAL FALLBACK ---
-    setProducts(prev => prev.filter(p => p.id !== productId));
-    addToast(getTranslatedText("Apparel deleted from collection.", "পোশাকটি সফলভাবে ডিলিট করা হয়েছে"), "success");
-    return true;
+    try {
+      const res = await fetch(`/api/products/${productId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setProducts(prev => prev.filter(p => p.id !== productId));
+        addToast(getTranslatedText("Apparel deleted from server collection successfully.", "পোশাকটি সফলভাবে ডিলিট করা হয়েছে"), "success");
+        return true;
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        addToast(errData.message || getTranslatedText("Server product deletion failed.", "ডিলিট করতে ব্যর্থ হয়েছে"), "error");
+        return false;
+      }
+    } catch (err) {
+      console.error("Server product deletion failed.", err);
+      addToast(getTranslatedText("Failed to establish server connection.", "সার্ভার কানেকশন ব্যর্থ হয়েছে"), "error");
+      return false;
+    }
   };
 
   const getAdminAnalytics = async (): Promise<any | null> => {

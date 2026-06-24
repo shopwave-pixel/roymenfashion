@@ -75,6 +75,7 @@ export const AdminDashboard: React.FC = () => {
   const [prodCategory, setProdCategory] = useState('T-Shirts');
   const [prodDesc, setProdDesc] = useState('');
   const [prodImage, setProdImage] = useState('');
+  const [prodInStock, setProdInStock] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
 
   const processFile = (file: File) => {
@@ -174,7 +175,7 @@ export const AdminDashboard: React.FC = () => {
       images: [prodImage],
       sizes: prodSizes,
       colors: prodColors,
-      inStock: true
+      inStock: prodInStock
     };
 
     let success = false;
@@ -193,6 +194,7 @@ export const AdminDashboard: React.FC = () => {
       setProdOriginalPrice('');
       setProdDesc('');
       setProdImage('');
+      setProdInStock(true);
     }
   };
 
@@ -206,6 +208,7 @@ export const AdminDashboard: React.FC = () => {
     setProdImage(p.images[0] || '');
     setProdSizes(p.sizes || ['S', 'M', 'L']);
     setProdColors(p.colors || ['Stealth Black']);
+    setProdInStock(p.inStock !== false);
     setIsProductModalOpen(true);
   };
 
@@ -459,7 +462,7 @@ export const AdminDashboard: React.FC = () => {
                     {getTranslatedText("Wardrobe Collection Directory", "পোশাক সামগ্রী নিয়ন্ত্রণ প্যানেল")}
                   </h2>
                   <button
-                    onClick={() => { setEditingProduct(null); setIsProductModalOpen(true); }}
+                    onClick={() => { setEditingProduct(null); setProdInStock(true); setIsProductModalOpen(true); }}
                     className="px-4 py-2 bg-black hover:bg-zinc-850 text-white dark:bg-white dark:text-black dark:hover:bg-zinc-200 text-xs font-black uppercase tracking-widest rounded flex items-center space-x-1.5"
                   >
                     <Plus size={14} />
@@ -832,7 +835,8 @@ export const AdminDashboard: React.FC = () => {
                     <input
                       type="checkbox"
                       id="in-stock-checkbox"
-                      defaultChecked={true}
+                      checked={prodInStock}
+                      onChange={(e) => setProdInStock(e.target.checked)}
                       className="w-4 h-4 text-yellow-500 border-zinc-300 rounded focus:ring-yellow-500"
                     />
                     <label htmlFor="in-stock-checkbox" className="ml-2 text-xs text-zinc-650 dark:text-zinc-350 select-none cursor-pointer">

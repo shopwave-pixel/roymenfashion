@@ -418,39 +418,11 @@ const connectDB = async () => {
       }
     } catch (err: any) {
       isMongoConnected = false;
-      console.error('==================================================================');
-      console.error('[CRITICAL DEVOPS ERROR] MongoDB Connection Handshake Failed!');
-      console.error(`[CRITICAL DEVOPS ERROR] Error Type: ${err?.name || 'Unknown Error Type'}`);
-      console.error(`[CRITICAL DEVOPS ERROR] Error Message: ${err?.message || 'No Error Message Provided'}`);
-      console.error(`[CRITICAL DEVOPS ERROR] Error Code: ${err?.code || 'N/A'}`);
-      
-      if (err?.stack) {
-        console.error(`[CRITICAL DEVOPS ERROR] Full stack trace:\n${err.stack}`);
-      }
-      
-      console.error('------------------------------------------------------------------');
-      console.error('[ROYMEN DIAGNOSIS] Automated connection bottleneck analysis:');
-      
-      const errMsgStr = String(err?.message || '');
-      
-      if (errMsgStr.includes('serverSelectionTimeoutMS') || errMsgStr.includes('timeout') || err?.name === 'MongoServerSelectionError') {
-        console.error('🔴 ROOT CAUSE ESTIMATE: Network timeout (MongoDB Atlas Firewall Block).');
-        console.error('👉 HOW TO SOLVE: Go to MongoDB Atlas Console -> Network Access -> Add IP Address.');
-        console.error('👉 Ensure you add "0.0.0.0/0" to whitelist all public incoming Docker container threads. Do NOT use standard home IPs because serverless containers continuously rotate system IPs.');
-      } else if (errMsgStr.includes('Authentication failed') || errMsgStr.includes('bad auth') || err?.code === 18) {
-        console.error('🔴 ROOT CAUSE ESTIMATE: Database user authentication failed.');
-        console.error('👉 HOW TO SOLVE: Double check username and password inside connection string.');
-        console.error('👉 NOTICE: If the database password contains special characters (e.g. @, :, #, ?), you MUST url-encode them (e.g. @ replaces with %40, # replaces with %23).');
-      } else if (errMsgStr.includes('ENOTFOUND') || errMsgStr.includes('querySrv')) {
-        console.error('🔴 ROOT CAUSE ESTIMATE: DNS SRV record lookup failed.');
-        console.error('👉 HOW TO SOLVE: Verify the domain structure in the connection string. Using an older connection format like (mongodb://) instead of (mongodb+srv://) might resolve DNS issues in some Node environments.');
-      } else {
-        console.error('🔴 ROOT CAUSE ESTIMATE: Unclassified Mongoose system mismatch.');
-        console.error('👉 HOW TO SOLVE: Check if MONGO_URI is wrapped in misplaced quotes in Railway dashboard settings.');
-      }
-      
-      console.warn('\n[ROYMEN INFO] Activating dynamic local storage fallback mode (all features are 100% fully functional locally using JSON backup database).');
-      console.error('==================================================================');
+      console.log('==================================================================');
+      console.log('[ROYMEN INFO] MongoDB is currently unavailable or authentication failed.');
+      console.log(`[ROYMEN INFO] Notice: ${err?.message || 'Connection reference failed'}`);
+      console.log('[ROYMEN INFO] Activating dynamic local storage fallback mode (all features are 100% fully functional using local JSON database).');
+      console.log('==================================================================');
       loadLocalDB();
     }
   } else {
@@ -857,6 +829,29 @@ app.post('/api/products', authenticateToken, adminOnly, async (req, res) => {
 
 // ⚠️ UPDATE APPAREL SETTINGS (ADMIN CAN REWRITE)
 app.put('/api/products/:id', authenticateToken, adminOnly, async (req, res) => {
+  const prodId = req.params.id;
+  const updateFields = req.body;
+
+  if (isMongoConnected) {
+    try {
+      const updated = await ProductModel.findOneAndUpdate({ id: prodId }, updateFields, { new: true });
+      if (!updated) return res.status(404).json({ message: 'Collection product not found.' });
+      res.json(updated);
+    } catch (err) {
+      res.status(500).json({ message: 'Error updating product catalog model.' });
+    }
+  } else {
+    const db = loadLocalDB();
+    const idx = db.products.findIndex(p => p.id === prodId);
+    if (idx === -1) return res.status(404).json({ message: 'Collection product not found.' });
+
+    db.products[idx] = { ...db.products[idx], ...updateFields };
+    saveLocalDB(db);
+    res.json(db.products[idx]);
+  }
+});
+
+app.patch('/api/products/:id', authenticateToken, adminOnly, async (req, res) => {
   const prodId = req.params.id;
   const updateFields = req.body;
 
