@@ -1,7 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
-import { products } from '../data/products';
 import { ArrowRight } from 'lucide-react';
 
 interface CategoryCard {
@@ -13,7 +12,7 @@ interface CategoryCard {
 }
 
 export const Categories: React.FC = () => {
-  const { getTranslatedText } = useShop();
+  const { getTranslatedText, products } = useShop();
 
   const categoryCards: CategoryCard[] = [
     {

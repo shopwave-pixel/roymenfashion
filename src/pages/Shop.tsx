@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
-import { products } from '../data/products';
 import { ProductCard } from '../components/ProductCard';
 import { SlidersHorizontal, ArrowUpDown, X } from 'lucide-react';
 
 export const Shop: React.FC = () => {
-  const { getTranslatedText } = useShop();
+  const { getTranslatedText, products } = useShop();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Search, Category and Toggles synced from query params
@@ -118,7 +117,7 @@ export const Shop: React.FC = () => {
     }
 
     return result;
-  }, [searchFilter, selectedCategory, selectedSize, maxPrice, selectedSort]);
+  }, [products, searchFilter, selectedCategory, selectedSize, maxPrice, selectedSort]);
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 transition-colors duration-300">

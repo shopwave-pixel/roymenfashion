@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
-import { products } from '../data/products';
 import { ProductCard } from '../components/ProductCard';
 import { ChevronLeft, ChevronRight, Star, Truck, ShieldCheck, RefreshCw, BadgePercent } from 'lucide-react';
 
 export const Home: React.FC = () => {
-  const { getTranslatedText } = useShop();
+  const { getTranslatedText, products } = useShop();
   const navigate = useNavigate();
   const [currentHero, setCurrentHero] = useState(0);
 

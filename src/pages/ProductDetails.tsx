@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
-import { products, sampleReviews } from '../data/products';
+import { sampleReviews } from '../data/products';
 import { ProductCard } from '../components/ProductCard';
 import { Product, Review } from '../types';
 import { Star, Heart, ShoppingBag, Truck, Undo, ShieldAlert, Check, Plus, Minus } from 'lucide-react';
@@ -9,13 +9,11 @@ import { Star, Heart, ShoppingBag, Truck, Undo, ShieldAlert, Check, Plus, Minus 
 export const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { addToCart, toggleWishlist, isInWishlist, getTranslatedText, addToast } = useShop();
+  const { addToCart, toggleWishlist, isInWishlist, getTranslatedText, addToast, products } = useShop();
 
-  const product = useMemo(() => products.find((p) => p.id === id), [id]);
+  const product = useMemo(() => products.find((p) => p.id === id), [products, id]);
 
-  const [activeImage, setActiveImage] = useState<string>(
-    products.find((p) => p.id === id)?.images[0] || ''
-  );
+  const [activeImage, setActiveImage] = useState<string>('');
   const [selectedSize, setSelectedSize] = useState<string>('');
   const [selectedColor, setSelectedColor] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
