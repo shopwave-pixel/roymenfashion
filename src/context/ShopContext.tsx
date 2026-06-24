@@ -87,34 +87,50 @@ const ShopContext = createContext<ShopContextType | undefined>(undefined);
 // and routes them to a custom VITE_API_URL if configured, preventing 
 // CORS mismatches or Netlify SPA catch-all redirect failures.
 const getApiBase = (): string => {
-  const envUrl = ((import.meta as any).env?.VITE_API_URL || '')
-    .trim()
-    .replace(/^["']|["']$/g, '')
-    .replace(/\/$/, '');
-  if (envUrl) return envUrl;
-
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     
-    // Explicitly check for known deployment platforms, local environments, and AI Studio sandboxes.
-    // When running on these, we leverage relative paths ('/api/*') because:
-    // - On Vercel: vercel.json transparently proxies /api/* to Railway under the hood.
-    // - On Netlify: netlify.toml transparently proxies /api/* to Railway under the hood.
-    // - On local dev & Railway: the client and server share the same origin, so relative path works.
     const isVercel = host.includes('vercel.app');
     const isNetlify = host.includes('netlify.app');
     const isRailway = host.includes('roymenfashion-production.up.railway.app');
+    const isLocalhost = 
+      host === 'localhost' || 
+      host === '127.0.0.1' || 
+      host.startsWith('192.168.') || 
+      host.startsWith('10.') || 
+      host.startsWith('172.');
+    const isAiStudio = 
+      host.includes('ais-dev-') || 
+      host.includes('ais-pre-');
 
     // For deployed production frontends (Vercel, Netlify) or running on Railway itself,
-    // we use relative paths ('/api/*') to let the server proxy or same-origin resolve properly.
-    if (isVercel || isNetlify || isRailway) {
+    // or when in local development/AI Studio sandbox, we use relative paths ('/api/*').
+    // This allows:
+    // 1. Local/AI Studio: Connects with the fully featured container backend.
+    // 2. Vercel/Netlify: Routes transparently via build-in proxy rewrite engines to the production DB.
+    if (isLocalhost || isAiStudio || isVercel || isNetlify || isRailway) {
       return '';
     }
-
-    // For the AI Studio development sandbox, localhost, or any other domain,
-    // point directly to the live production Railway backend to enable real-time database sync!
-    return 'https://roymenfashion-production.up.railway.app';
   }
+
+  // Fallback to custom VITE_API_URL environment variable if configured (e.g. for custom domains)
+  let envUrl = ((import.meta as any).env?.VITE_API_URL || '').trim();
+  
+  // Robustly extract the HTTP/HTTPS URL if the env variable value is malformed or copy-pasted with the key
+  // e.g. "VITE API URL=https://..." or "VITE_API_URL=https://..."
+  const urlMatch = envUrl.match(/https?:\/\/[^\s"']+/);
+  if (urlMatch) {
+    envUrl = urlMatch[0];
+  } else {
+    envUrl = envUrl.replace(/^["']|["']$/g, '');
+  }
+
+  envUrl = envUrl.replace(/\/$/, '');
+  if (envUrl && (envUrl.startsWith('http://') || envUrl.startsWith('https://'))) {
+    return envUrl;
+  }
+
+  // Final fallback to relative path
   return '';
 };
 
