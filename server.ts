@@ -2012,16 +2012,20 @@ app.get('/api/test-email', async (req, res) => {
       <div class="logo">ROY MEN</div>
       <div style="font-size: 8px; letter-spacing: 0.3em; text-transform: uppercase; color: #71717a; margin-top: 5px;">WEAR CONFIDENCE</div>
     </div>
-    <h3 style="margin-top:0; font-family:serif; font-weight:normal; letter-spacing:0.02em;">ROY MEN Gmail SMTP Test</h3>
-    <p>ROY MEN Email System is working successfully.</p>
+    <h3 style="margin-top:0; font-family:serif; font-weight:normal; letter-spacing:0.02em;">ROY MEN Email System Test</h3>
+    <p>This email confirms that Gmail SMTP is configured correctly.</p>
     
     <table class="meta-table">
       <tr>
-        <td class="label">SMTP Provider:</td>
-        <td>Gmail</td>
+        <td class="label">SMTP Host:</td>
+        <td>${process.env.EMAIL_HOST || 'smtp.gmail.com'}</td>
       </tr>
       <tr>
-        <td class="label">Current Server Time:</td>
+        <td class="label">SMTP Port:</td>
+        <td>${process.env.EMAIL_PORT || '465'}</td>
+      </tr>
+      <tr>
+        <td class="label">Server Time:</td>
         <td style="font-family: monospace; font-size: 11px;">${new Date().toString()} (${new Date().toISOString()})</td>
       </tr>
       <tr>
@@ -2043,7 +2047,7 @@ app.get('/api/test-email', async (req, res) => {
     const info = await transporter.sendMail({
       from,
       to: recipient,
-      subject: 'ROY MEN Gmail SMTP Test',
+      subject: 'ROY MEN - Gmail SMTP Test',
       html: testHtml
     });
 
@@ -2055,6 +2059,7 @@ app.get('/api/test-email', async (req, res) => {
       message: "Test email sent successfully.",
       messageId: info.messageId,
       accepted: info.accepted,
+      rejected: info.rejected,
       response: info.response
     });
 
