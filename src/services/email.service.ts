@@ -10,6 +10,17 @@ interface EmailConfig {
   from: string;
 }
 
+// 8. Add startup logging that prints variables without exposing EMAIL_PASS
+console.log('==================================================================');
+console.log('[ROYMEN SMTP STARTUP] DIAGNOSTICS & CONFIGURATION INITIALIZED:');
+console.log(`- EMAIL_HOST: ${process.env.EMAIL_HOST || 'smtp.gmail.com (Default)'}`);
+console.log(`- EMAIL_PORT: ${process.env.EMAIL_PORT || '587 (Default)'}`);
+console.log(`- EMAIL_USER: ${process.env.EMAIL_USER || 'Not Configured'}`);
+console.log(`- EMAIL_FROM: ${process.env.EMAIL_FROM || 'Not Configured'}`);
+console.log(`- ADMIN_EMAIL: ${process.env.ADMIN_EMAIL || 'Not Configured'}`);
+console.log(`- EMAIL_PASS configured: ${process.env.EMAIL_PASS ? 'YES (VALUE HIDDEN)' : 'NO'}`);
+console.log('==================================================================');
+
 // Lazy initializer for Nodemailer transporter to prevent crashes on startup if env variables are empty
 let transporter: nodemailer.Transporter | null = null;
 
@@ -25,6 +36,8 @@ export const getTransporter = (): nodemailer.Transporter => {
       console.warn('[ROYMEN Email] Warning: EMAIL_USER and EMAIL_PASS are not configured. Emails will log to terminal fallback only.');
     }
 
+    // 4. Verify host, port, secure, auth, connectionTimeout, greetingTimeout, socketTimeout, TLS settings
+    // 5. Port 587 uses secure:false, 6. Port 465 uses secure:true
     transporter = nodemailer.createTransport({
       host,
       port,
@@ -33,13 +46,36 @@ export const getTransporter = (): nodemailer.Transporter => {
         user: user || '',
         pass: pass || ''
       },
+      connectionTimeout: 15000, // 15 seconds connection timeout
+      greetingTimeout: 15000,   // 15 seconds greeting timeout
+      socketTimeout: 30000,     // 30 seconds socket timeout
       tls: {
-        rejectUnauthorized: false // Prevents issues with self-signed certs in sandboxes
+        rejectUnauthorized: false, // Prevents issues with self-signed certs in sandboxes
+        minVersion: 'TLSv1.2'      // Enforce modern secure TLS version
       }
     });
   }
   return transporter;
 };
+
+/**
+ * 10. Verify SMTP connection directly using verifySmtpConnection helper
+ */
+export async function verifySmtpConnection(): Promise<{ success: boolean; error?: any }> {
+  try {
+    const activeTransporter = getTransporter();
+    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      return { 
+        success: false, 
+        error: new Error('EMAIL_USER or EMAIL_PASS environment variable is missing.') 
+      };
+    }
+    await activeTransporter.verify();
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error };
+  }
+}
 
 /**
  * Reusable core function to dispatch an email.
@@ -60,6 +96,13 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
       return true;
     }
 
+    // 10. Add transporter.verify() before sending emails
+    console.log(`[ROYMEN Email] Active verification of SMTP routing connection to dispatch to: ${to}...`);
+    const verification = await verifySmtpConnection();
+    if (!verification.success) {
+      throw verification.error || new Error('SMTP pre-verification check failed.');
+    }
+
     await activeTransporter.sendMail({
       from,
       to,
@@ -70,6 +113,20 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
     return true;
   } catch (error: any) {
     console.error(`[ROYMEN Email Error] Failed sending email to ${to}:`, error.message || error);
+    
+    // 11. Improve error logging to display: code, command, response, responseCode, errno, syscall, stack
+    if (error) {
+      console.error('=================== DETAILED SMTP DIAGNOSTIC EXCEPTION ===================');
+      console.error(`- ERROR MESSAGE:  ${error.message || 'N/A'}`);
+      console.error(`- SMTP CODE:      ${error.code || 'N/A'}`);
+      console.error(`- COMMAND:        ${error.command || 'N/A'}`);
+      console.error(`- RESPONSE:       ${error.response || 'N/A'}`);
+      console.error(`- RESPONSE CODE:  ${error.responseCode || 'N/A'}`);
+      console.error(`- ERRNO:          ${error.errno || 'N/A'}`);
+      console.error(`- SYSCALL:        ${error.syscall || 'N/A'}`);
+      console.error(`- STACKTRACE:\n${error.stack || 'N/A'}`);
+      console.error('==========================================================================');
+    }
     return false;
   }
 }

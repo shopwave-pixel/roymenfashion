@@ -16,7 +16,8 @@ import {
   getPasswordChangedEmailTemplate, 
   getCustomerOrderConfirmationTemplate, 
   getAdminOrderNotificationTemplate, 
-  getOrderStatusTransitionTemplate 
+  getOrderStatusTransitionTemplate,
+  verifySmtpConnection
 } from './src/services/email.service';
 
 // ------------------------------------------------------------------
@@ -1912,6 +1913,32 @@ app.post('/api/admin/users/:id/reset-password', authenticateToken, adminOnly, as
     await sendEmail(user.email, 'Security Alert: Password Administratively Reset | ROY MEN', emailHtml);
 
     res.json({ message: `Successfully reset password for customer ${user.name}. Email dispatched.` });
+  }
+});
+
+// ⚠️ SMTP HEALTH CHECK: VERIFY SMTP CONFIGURATION DIRECTLY
+app.get('/api/test-smtp', async (req, res) => {
+  console.log('[ROYMEN TestSMTP] Initiating on-demand SMTP validation check...');
+  const result = await verifySmtpConnection();
+  
+  if (result.success) {
+    return res.status(200).send('SMTP connection successful');
+  } else {
+    const error = result.error || {};
+    return res.status(500).json({
+      status: 'error',
+      message: 'SMTP connection failed',
+      error: {
+        message: error.message || 'Unknown SMTP Error',
+        code: error.code || 'N/A',
+        command: error.command || 'N/A',
+        response: error.response || 'N/A',
+        responseCode: error.responseCode || 'N/A',
+        errno: error.errno || 'N/A',
+        syscall: error.syscall || 'N/A',
+        stack: error.stack || 'N/A'
+      }
+    });
   }
 });
 
