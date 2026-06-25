@@ -27,9 +27,9 @@ let transporter: nodemailer.Transporter | null = null;
 
 export const getTransporter = (): nodemailer.Transporter => {
   if (!transporter) {
-    const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
-    const port = Number(process.env.EMAIL_PORT || '465');
-    const secure = true; // Force Gmail SSL on port 465
+    const host = process.env.EMAIL_HOST || 'smtp-relay.brevo.com';
+    const port = Number(process.env.EMAIL_PORT || '587');
+    const secure = port === 465; // Dynamic secure mode: true for 465 SSL, false for 587 STARTTLS
     const user = process.env.EMAIL_USER;
     const pass = process.env.EMAIL_PASS;
 
@@ -37,7 +37,7 @@ export const getTransporter = (): nodemailer.Transporter => {
       console.warn('[ROYMEN Email] Warning: EMAIL_USER and EMAIL_PASS are not configured. Emails will log to terminal fallback only.');
     }
 
-    // Configure Nodemailer specifically for Gmail SSL on port 465
+    // Configure Nodemailer with dynamic settings and detailed logs
     transporter = nodemailer.createTransport({
       host,
       port,
@@ -75,10 +75,22 @@ export const getTransporter = (): nodemailer.Transporter => {
 /**
  * 10. Verify SMTP connection directly using verifySmtpConnection helper
  */
-export async function verifySmtpConnection(): Promise<{ success: boolean; error?: any }> {
-  const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
-  const port = Number(process.env.EMAIL_PORT || '465');
-  const secure = true;
+export async function verifySmtpConnection(): Promise<{
+  success: boolean;
+  error?: any;
+  host: string;
+  port: number;
+  user: string;
+  secure: boolean;
+  resolvedIp: string;
+  connectionTime: number;
+  smtpResponse: string;
+  authResult: string;
+}> {
+  const host = process.env.EMAIL_HOST || 'smtp-relay.brevo.com';
+  const port = Number(process.env.EMAIL_PORT || '587');
+  const secure = port === 465;
+  const user = process.env.EMAIL_USER || '';
 
   let resolvedIp = 'Unknown';
   try {
@@ -100,7 +112,15 @@ export async function verifySmtpConnection(): Promise<{ success: boolean; error?
       console.error('[ROYMEN SMTP Pre-Verification] Failed: Credentials not configured.');
       return { 
         success: false, 
-        error: missingErr
+        error: missingErr,
+        host,
+        port,
+        user,
+        secure,
+        resolvedIp,
+        connectionTime: 0,
+        smtpResponse: 'Credentials missing',
+        authResult: 'FAILED'
       };
     }
     console.log('[ROYMEN SMTP Pre-Verification] Executing transporter.verify()...');
@@ -112,14 +132,27 @@ export async function verifySmtpConnection(): Promise<{ success: boolean; error?
       authResult = 'SUCCESS / PASSED';
 
       console.log('=================== SMTP DIAGNOSTIC VERIFICATION SUCCESS ===================');
-      console.log(`- Host:                  ${host}`);
-      console.log(`- Port:                  ${port}`);
-      console.log(`- Secure:                ${secure}`);
+      console.log(`- SMTP Host:             ${host}`);
+      console.log(`- SMTP Port:             ${port}`);
+      console.log(`- SMTP User:             ${user}`);
+      console.log(`- Secure Mode:           ${secure}`);
       console.log(`- Resolved IP:           ${resolvedIp}`);
+      console.log(`- Verify Result:         SUCCESS / PASSED`);
       console.log(`- Connection Time:       ${connectionTime} ms`);
       console.log(`- SMTP Response:         ${smtpResponse}`);
-      console.log(`- Authentication Result: ${authResult}`);
       console.log('============================================================================');
+
+      return {
+        success: true,
+        host,
+        port,
+        user,
+        secure,
+        resolvedIp,
+        connectionTime,
+        smtpResponse,
+        authResult
+      };
     } catch (verifyErr: any) {
       connectionTime = Date.now() - startTime;
       smtpResponse = verifyErr.response || verifyErr.message || 'Error occurred during SMTP handshake';
@@ -129,19 +162,17 @@ export async function verifySmtpConnection(): Promise<{ success: boolean; error?
       console.error(verifyErr); // Log complete error object
 
       console.log('=================== SMTP DIAGNOSTIC VERIFICATION FAILURE ===================');
-      console.log(`- Host:                  ${host}`);
-      console.log(`- Port:                  ${port}`);
-      console.log(`- Secure:                ${secure}`);
+      console.log(`- SMTP Host:             ${host}`);
+      console.log(`- SMTP Port:             ${port}`);
+      console.log(`- SMTP User:             ${user}`);
+      console.log(`- Secure Mode:           ${secure}`);
       console.log(`- Resolved IP:           ${resolvedIp}`);
+      console.log(`- Verify Result:         FAILED`);
       console.log(`- Connection Time:       ${connectionTime} ms`);
       console.log(`- SMTP Response:         ${smtpResponse}`);
-      console.log(`- Authentication Result: ${authResult}`);
       console.log('============================================================================');
       throw verifyErr;
     }
-    
-    console.log('[ROYMEN SMTP Pre-Verification] SMTP connection verified successfully (transporter.verify() passed).');
-    return { success: true };
   } catch (error: any) {
     console.error('[ROYMEN SMTP Pre-Verification] Failed with error:', error.message || error);
     console.error(error); // Log complete error object
@@ -159,7 +190,18 @@ export async function verifySmtpConnection(): Promise<{ success: boolean; error?
       console.error(`- STACKTRACE:\n${error.stack || 'N/A'}`);
       console.error('======================================================================');
     }
-    return { success: false, error };
+    return { 
+      success: false, 
+      error,
+      host,
+      port,
+      user,
+      secure,
+      resolvedIp,
+      connectionTime: Date.now() - startTime,
+      smtpResponse: error.response || error.message || 'N/A',
+      authResult: 'FAILED'
+    };
   }
 }
 

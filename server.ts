@@ -1953,46 +1953,54 @@ app.get('/api/test-email', async (req, res) => {
   const recipient = (req.query.to as string) || process.env.ADMIN_EMAIL || process.env.EMAIL_USER || 'mrinal2192@gmail.com';
 
   try {
-    // 1. Create the Nodemailer transporter.
+    // 1. Create the existing Nodemailer transporter.
     const transporter = getTransporter();
 
-    // 2. Call transporter.verify()
-    console.log('[ROYMEN TestEmail] Running transporter.verify()...');
-    try {
-      const verifyResult = await transporter.verify();
-      // 3. Log the complete verify response.
-      console.log('[ROYMEN TestEmail] transporter.verify() success. Response:', verifyResult);
-    } catch (verifyError: any) {
-      console.error('[ROYMEN TestEmail] transporter.verify() failed:', verifyError);
-      if (verifyError) {
-        console.error(`- error.message:      ${verifyError.message || 'N/A'}`);
-        console.error(`- error.code:         ${verifyError.code || 'N/A'}`);
-        console.error(`- error.command:      ${verifyError.command || 'N/A'}`);
-        console.error(`- error.response:     ${verifyError.response || 'N/A'}`);
-        console.error(`- error.responseCode: ${verifyError.responseCode || 'N/A'}`);
-        console.error(`- error.errno:        ${verifyError.errno || 'N/A'}`);
-        console.error(`- error.syscall:      ${verifyError.syscall || 'N/A'}`);
-        console.error(`- error.address:      ${verifyError.address || 'N/A'}`);
-        console.error(`- error.port:         ${verifyError.port || 'N/A'}`);
-        console.error(`- error.stack:        ${verifyError.stack || 'N/A'}`);
-      }
+    // 2. Call transporter.verify() via verifySmtpConnection to log all SMTP debug info
+    console.log('[ROYMEN TestEmail] Verifying connection first...');
+    const verifyResult = await verifySmtpConnection();
 
+    // If verification fails, return the COMPLETE error.
+    if (!verifyResult.success) {
+      console.error('[ROYMEN TestEmail] Connection verification failed.');
+      const err = verifyResult.error || {};
       return res.status(500).json({
         success: false,
-        error: verifyError.message || 'SMTP Verification Failed',
-        code: verifyError.code || 'N/A',
-        command: verifyError.command || 'N/A',
-        response: verifyError.response || 'N/A',
-        responseCode: verifyError.responseCode || 'N/A',
-        errno: verifyError.errno || 'N/A',
-        syscall: verifyError.syscall || 'N/A',
-        address: verifyError.address || 'N/A',
-        port: verifyError.port || 'N/A',
-        stack: verifyError.stack || 'N/A'
+        error: err.message || 'SMTP Verification Failed',
+        code: err.code || 'N/A',
+        command: err.command || 'N/A',
+        response: err.response || 'N/A',
+        responseCode: err.responseCode || 'N/A',
+        errno: err.errno || 'N/A',
+        syscall: err.syscall || 'N/A',
+        address: err.address || 'N/A',
+        port: err.port || 'N/A',
+        stack: err.stack || 'N/A'
       });
     }
 
     // 4. Send a test email to ADMIN_EMAIL.
+    const host = process.env.EMAIL_HOST || 'smtp-relay.brevo.com';
+    const port = process.env.EMAIL_PORT || '587';
+    const user = process.env.EMAIL_USER || '';
+    const secure = port === '465';
+
+    console.log('[ROYMEN TestEmail] SMTP parameters verified. Logging to Railway:');
+    console.log(`- SMTP Host: ${host}`);
+    console.log(`- SMTP Port: ${port}`);
+    console.log(`- SMTP User: ${user}`);
+    console.log(`- Secure Mode: ${secure}`);
+    console.log(`- Resolved IP: ${verifyResult.resolvedIp}`);
+    console.log(`- Verify Result: SUCCESS`);
+    console.log(`- Connection Time: ${verifyResult.connectionTime} ms`);
+    console.log(`- SMTP Response: ${verifyResult.smtpResponse}`);
+
+    // If EMAIL_FROM looks invalid, log warning
+    const from = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'ROY MEN <noreply@roymen.com>';
+    if (from && !from.includes('@')) {
+      console.warn('[ROYMEN TestEmail] Warning: EMAIL_FROM does not contain "@". It might not be a verified sender in Brevo.');
+    }
+
     const testHtml = `
 <!DOCTYPE html>
 <html>
@@ -2020,11 +2028,11 @@ app.get('/api/test-email', async (req, res) => {
     <table class="meta-table">
       <tr>
         <td class="label">SMTP Host:</td>
-        <td>${process.env.EMAIL_HOST || 'smtp.gmail.com'}</td>
+        <td>${host}</td>
       </tr>
       <tr>
         <td class="label">SMTP Port:</td>
-        <td>${process.env.EMAIL_PORT || '465'}</td>
+        <td>${port}</td>
       </tr>
       <tr>
         <td class="label">Server Time:</td>
@@ -2032,7 +2040,7 @@ app.get('/api/test-email', async (req, res) => {
       </tr>
       <tr>
         <td class="label">Environment:</td>
-        <td>${process.env.NODE_ENV || 'development'}</td>
+        <td>${process.env.NODE_ENV || 'production'}</td>
       </tr>
     </table>
     
@@ -2043,7 +2051,6 @@ app.get('/api/test-email', async (req, res) => {
 </html>
     `;
 
-    const from = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'ROY MEN <noreply@roymen.com>';
     console.log(`[ROYMEN TestEmail] Dispatching test email to: ${recipient}...`);
 
     const info = await transporter.sendMail({
@@ -2053,9 +2060,21 @@ app.get('/api/test-email', async (req, res) => {
       html: testHtml
     });
 
-    console.log('[ROYMEN TestEmail] SendMail completed successfully. info:', info);
+    console.log('=================== SMTP DISPATCH SUCCESS ===================');
+    console.log(`- SMTP Host:             ${host}`);
+    console.log(`- SMTP Port:             ${port}`);
+    console.log(`- SMTP User:             ${user}`);
+    console.log(`- Secure Mode:           ${secure}`);
+    console.log(`- Resolved IP:           ${verifyResult.resolvedIp}`);
+    console.log(`- Verify Result:         SUCCESS`);
+    console.log(`- Connection Time:       ${verifyResult.connectionTime} ms`);
+    console.log(`- Message ID:            ${info.messageId}`);
+    console.log(`- Accepted Recipients:   ${JSON.stringify(info.accepted)}`);
+    console.log(`- Rejected Recipients:   ${JSON.stringify(info.rejected)}`);
+    console.log(`- SMTP Response:         ${info.response}`);
+    console.log('==============================================================');
 
-    // 5. Success response
+    // 4. Return success JSON
     return res.json({
       success: true,
       message: "Test email sent successfully.",
