@@ -2023,7 +2023,7 @@ app.get('/api/test-email', async (req, res) => {
       <div style="font-size: 8px; letter-spacing: 0.3em; text-transform: uppercase; color: #71717a; margin-top: 5px;">WEAR CONFIDENCE</div>
     </div>
     <h3 style="margin-top:0; font-family:serif; font-weight:normal; letter-spacing:0.02em;">ROY MEN Email System Test</h3>
-    <p>This email confirms that Gmail SMTP is configured correctly.</p>
+    <p>This email confirms that your SMTP mail routing service (${host}) is configured and functioning correctly.</p>
     
     <table class="meta-table">
       <tr>
@@ -2056,7 +2056,7 @@ app.get('/api/test-email', async (req, res) => {
     const info = await transporter.sendMail({
       from,
       to: recipient,
-      subject: 'ROY MEN - Gmail SMTP Test',
+      subject: `ROY MEN - SMTP Service Test (${host})`,
       html: testHtml
     });
 
@@ -2188,56 +2188,140 @@ const testTcpConnection = (host: string, port: number, timeoutMs = 10000): Promi
 // 🌐 NETWORK DIAGNOSTICS: OUTBOUND SMTP PORT VERIFICATION
 app.get('/api/network-test', async (req, res) => {
   console.log('[ROYMEN Diagnostics] GET /api/network-test requested');
-  const targetHost = 'smtp.gmail.com';
+  const targetHost = 'smtp-relay.brevo.com';
+  
+  // 1. Resolve DNS
+  let ipv4 = 'N/A';
+  let ipv6 = 'N/A';
+  try {
+    const ipv4s = await dns.promises.resolve4(targetHost).catch(() => [] as string[]);
+    if (ipv4s && ipv4s.length > 0) ipv4 = ipv4s[0];
+  } catch (e) {}
+  try {
+    const ipv6s = await dns.promises.resolve6(targetHost).catch(() => [] as string[]);
+    if (ipv6s && ipv6s.length > 0) ipv6 = ipv6s[0];
+  } catch (e) {}
+
+  if (ipv4 === 'N/A') {
+    try {
+      const lookupResult = await dns.promises.lookup(targetHost, { family: 4 });
+      ipv4 = lookupResult.address;
+    } catch (e) {}
+  }
+  if (ipv6 === 'N/A') {
+    try {
+      const lookupResult = await dns.promises.lookup(targetHost, { family: 6 });
+      ipv6 = lookupResult.address;
+    } catch (e) {}
+  }
+
+  // 2. Open raw TCP socket to smtp-relay.brevo.com:587
+  const tcpResult = await new Promise<any>((resolve) => {
+    const startTime = Date.now();
+    let completed = false;
+
+    const socket = net.createConnection({ host: targetHost, port: 587 });
+    socket.setTimeout(10000); // 10s timeout
+
+    socket.on('connect', () => {
+      if (completed) return;
+      completed = true;
+      socket.destroy();
+      resolve({
+        success: true,
+        timeMs: Date.now() - startTime
+      });
+    });
+
+    socket.on('timeout', () => {
+      if (completed) return;
+      completed = true;
+      socket.destroy();
+      resolve({
+        success: false,
+        error: 'ETIMEDOUT',
+        code: 'ETIMEDOUT',
+        errno: -110,
+        syscall: 'connect',
+        message: 'TCP socket connection timed out after 10000ms'
+      });
+    });
+
+    socket.on('error', (err: any) => {
+      if (completed) return;
+      completed = true;
+      socket.destroy();
+      resolve({
+        success: false,
+        error: err.message || 'Unknown socket error',
+        code: err.code || 'UNKNOWN',
+        errno: err.errno || 'N/A',
+        syscall: err.syscall || 'N/A'
+      });
+    });
+  });
+
+  // 3. Return JSON response
+  if (tcpResult.success) {
+    return res.json({
+      dns: {
+        ipv4,
+        ipv6
+      },
+      tcp: {
+        success: true,
+        timeMs: tcpResult.timeMs
+      }
+    });
+  } else {
+    return res.json({
+      dns: {
+        ipv4,
+        ipv6
+      },
+      tcp: {
+        success: false,
+        error: tcpResult.error,
+        code: tcpResult.code,
+        errno: tcpResult.errno,
+        syscall: tcpResult.syscall
+      },
+      outboundNetworkConnectivityIssue: true,
+      diagnosticMessage: "CRITICAL OUTBOUND CONNECTION FAILURE: The raw TCP socket connection to smtp-relay.brevo.com on port 587 failed or timed out. This indicates that outbound port 587 is blocked or restricted by the platform/firewall/Railway network environment, preventing Nodemailer from establishing any SMTP connection. The issue is outbound network connectivity, not Nodemailer itself."
+    });
+  }
+});
+
+// 🌐 NETWORK DIAGNOSTICS: TEMPORARY RAW TCP SMTP DEBUGGING
+app.get('/api/smtp-debug', async (req, res) => {
+  console.log('[ROYMEN SMTP-Debug] GET /api/smtp-debug requested');
+  const targetHost = 'smtp-relay.brevo.com';
   
   // 1. Resolve DNS
   const dnsResult = await performDnsLookup(targetHost);
-
-  // 2. Test TCP ports
-  const port465Result = await testTcpConnection(targetHost, 465, 10000);
+  
+  // 2. Attempt raw TCP connection to port 587
   const port587Result = await testTcpConnection(targetHost, 587, 10000);
-
-  // 3. Clear explanation summary
-  let summary = '';
-  if (port465Result.success || port587Result.success) {
-    summary = `SUCCESS: Outbound TCP connectivity to ${targetHost} is successful. `;
-    if (port465Result.success && port587Result.success) {
-      summary += 'Both SSL (465) and STARTTLS (587) are reachable.';
-    } else if (port465Result.success) {
-      summary += 'SSL (465) is reachable, but STARTTLS (587) is not.';
-    } else {
-      summary += 'STARTTLS (587) is reachable, but SSL (465) is not.';
-    }
+  
+  // 3. Craft response
+  let statusMessage = '';
+  if (port587Result.success) {
+    statusMessage = `SUCCESS: Raw TCP connection to ${targetHost} on port 587 succeeded in ${port587Result.durationMs}ms. Outbound connection is open.`;
   } else {
-    summary = `CRITICAL FAILURE: The Railway runtime cannot reach Gmail SMTP (${targetHost}) on standard ports. ` +
-              `Both port 465 (duration: ${port465Result.durationMs}ms, error: ${port465Result.error}) ` +
-              `and port 587 (duration: ${port587Result.durationMs}ms, error: ${port587Result.error}) failed to connect. ` +
-              `This indicates outbound connection blockages (egress traffic restrictions) from your platform/firewall.`;
+    statusMessage = `CRITICAL FAILURE: The Railway runtime cannot reach Brevo SMTP (${targetHost}) on port 587. ` +
+                    `Duration: ${port587Result.durationMs}ms. Error: ${port587Result.error}. ` +
+                    `This indicates outbound network connectivity issues (blocked ports or platform egress restrictions) rather than any issue with Nodemailer itself.`;
   }
 
   return res.json({
-    success: port465Result.success || port587Result.success,
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'production',
-    summary,
-    dns: {
-      host: targetHost,
-      ipv4: dnsResult.ipv4,
-      ipv6: dnsResult.ipv6,
-      error: dnsResult.error
-    },
-    tests: {
-      port_465: {
-        host: targetHost,
-        port: 465,
-        ...port465Result
-      },
-      port_587: {
-        host: targetHost,
-        port: 587,
-        ...port587Result
-      }
-    }
+    success: port587Result.success,
+    targetHost,
+    resolvedIPv4: dnsResult.ipv4,
+    resolvedIPv6: dnsResult.ipv6,
+    tcpConnectionSuccess: port587Result.success,
+    connectionDurationMs: port587Result.durationMs,
+    timeoutReason: port587Result.timeoutReason || port587Result.error || 'N/A',
+    diagnosticMessage: statusMessage
   });
 });
 

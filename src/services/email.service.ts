@@ -12,14 +12,22 @@ interface EmailConfig {
 }
 
 // 8. Add startup logging that prints variables without exposing EMAIL_PASS
+const actualHost = process.env.EMAIL_HOST || '';
+const actualPort = process.env.EMAIL_PORT || '';
+const actualUser = process.env.EMAIL_USER || '';
+const actualSecure = actualPort === '465';
+
 console.log('==================================================================');
 console.log('[ROYMEN SMTP STARTUP] DIAGNOSTICS & CONFIGURATION INITIALIZED:');
-console.log(`- EMAIL_HOST: ${process.env.EMAIL_HOST || 'smtp.gmail.com (Default)'}`);
-console.log(`- EMAIL_PORT: ${process.env.EMAIL_PORT || '587 (Default)'}`);
-console.log(`- EMAIL_USER: ${process.env.EMAIL_USER || 'Not Configured'}`);
-console.log(`- EMAIL_FROM: ${process.env.EMAIL_FROM || 'Not Configured'}`);
-console.log(`- ADMIN_EMAIL: ${process.env.ADMIN_EMAIL || 'Not Configured'}`);
-console.log(`- EMAIL_PASS configured: ${process.env.EMAIL_PASS ? 'YES (VALUE HIDDEN)' : 'NO'}`);
+console.log('EMAIL_HOST:', actualHost);
+console.log('EMAIL_PORT:', actualPort);
+console.log('EMAIL_USER:', actualUser);
+console.log('secure:', actualSecure);
+console.log('------------------------------------------------------------------');
+console.log('SMTP Host:', actualHost || 'smtp-relay.brevo.com (Fallback)');
+console.log('SMTP Port:', actualPort ? Number(actualPort) : 587);
+console.log('SMTP User:', actualUser || 'Not Configured');
+console.log('Secure:', actualSecure);
 console.log('==================================================================');
 
 // Lazy initializer for Nodemailer transporter to prevent crashes on startup if env variables are empty
@@ -50,23 +58,7 @@ export const getTransporter = (): nodemailer.Transporter => {
       logger: true,            // Enable detailed SMTP logger
       connectionTimeout: 60000, // 60 seconds connection timeout
       greetingTimeout: 60000,   // 60 seconds greeting timeout
-      socketTimeout: 60000,     // 60 seconds socket timeout
-      // Force IPv4 DNS resolution to prevent IPv6 ENETUNREACH errors on platforms like Railway
-      lookup: (hostname: string, options: any, callback: any) => {
-        if (typeof options === 'function') {
-          callback = options;
-          options = {};
-        }
-        const dnsOpts = typeof options === 'object' && options !== null ? { ...options, family: 4 } : { family: 4 };
-        dns.lookup(hostname, dnsOpts, (err, address, family) => {
-          if (!err) {
-            console.log(`[SMTP DNS Lookup] Resolved ${hostname} to ${address} (IPv${family})`);
-          } else {
-            console.error(`[SMTP DNS Lookup Failed] ${hostname}:`, err);
-          }
-          callback(err, address, family);
-        });
-      }
+      socketTimeout: 60000      // 60 seconds socket timeout
     } as any);
   }
   return transporter;
@@ -123,6 +115,19 @@ export async function verifySmtpConnection(): Promise<{
         authResult: 'FAILED'
       };
     }
+
+    const activeHost = (activeTransporter as any).options?.host || host;
+    const activePort = (activeTransporter as any).options?.port || port;
+    const activeSecure = (activeTransporter as any).options?.secure ?? secure;
+    const activeUser = (activeTransporter as any).options?.auth?.user || user;
+
+    console.log('=================== SMTP PRE-VERIFY PARAMETERS ===================');
+    console.log(`- hostname: ${activeHost}`);
+    console.log(`- port:     ${activePort}`);
+    console.log(`- secure:   ${activeSecure}`);
+    console.log(`- user:     ${activeUser}`);
+    console.log('==================================================================');
+
     console.log('[ROYMEN SMTP Pre-Verification] Executing transporter.verify()...');
     
     try {
@@ -224,12 +229,17 @@ export async function sendEmail(to: string, subject: string, html: string, throw
       return true;
     }
 
-    // 10. Add transporter.verify() before sending emails
-    console.log(`[ROYMEN Email] Active verification of SMTP routing connection to dispatch to: ${to}...`);
-    const verification = await verifySmtpConnection();
-    if (!verification.success) {
-      throw verification.error || new Error('SMTP pre-verification check failed.');
-    }
+    const activeHost = (activeTransporter as any).options?.host || 'smtp-relay.brevo.com';
+    const activePort = (activeTransporter as any).options?.port || 587;
+    const activeSecure = (activeTransporter as any).options?.secure ?? false;
+    const activeUser = (activeTransporter as any).options?.auth?.user || '';
+
+    console.log('=================== SMTP SENDMAIL PARAMETERS ===================');
+    console.log(`- hostname: ${activeHost}`);
+    console.log(`- port:     ${activePort}`);
+    console.log(`- secure:   ${activeSecure}`);
+    console.log(`- user:     ${activeUser}`);
+    console.log('================================================================');
 
     try {
       await activeTransporter.sendMail({
