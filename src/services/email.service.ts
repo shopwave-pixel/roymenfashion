@@ -1,71 +1,11 @@
-import nodemailer from 'nodemailer';
-import dns from 'dns';
+import { sendEmail } from './brevo.service';
+import axios from 'axios';
 
-// Fully typed interface for SMTP Configuration
-interface EmailConfig {
-  host: string;
-  port: number;
-  secure: boolean;
-  user: string;
-  pass: string;
-  from: string;
-}
-
-// 8. Add startup logging that prints variables without exposing EMAIL_PASS
-const actualHost = process.env.EMAIL_HOST || '';
-const actualPort = process.env.EMAIL_PORT || '';
-const actualUser = process.env.EMAIL_USER || '';
-const actualSecure = actualPort === '465';
-
-console.log('==================================================================');
-console.log('[ROYMEN SMTP STARTUP] DIAGNOSTICS & CONFIGURATION INITIALIZED:');
-console.log('EMAIL_HOST:', actualHost);
-console.log('EMAIL_PORT:', actualPort);
-console.log('EMAIL_USER:', actualUser);
-console.log('secure:', actualSecure);
-console.log('------------------------------------------------------------------');
-console.log('SMTP Host:', actualHost || 'smtp-relay.brevo.com (Fallback)');
-console.log('SMTP Port:', actualPort ? Number(actualPort) : 587);
-console.log('SMTP User:', actualUser || 'Not Configured');
-console.log('Secure:', actualSecure);
-console.log('==================================================================');
-
-// Lazy initializer for Nodemailer transporter to prevent crashes on startup if env variables are empty
-let transporter: nodemailer.Transporter | null = null;
-
-export const getTransporter = (): nodemailer.Transporter => {
-  if (!transporter) {
-    const host = process.env.EMAIL_HOST || 'smtp-relay.brevo.com';
-    const port = Number(process.env.EMAIL_PORT || '587');
-    const secure = port === 465; // Dynamic secure mode: true for 465 SSL, false for 587 STARTTLS
-    const user = process.env.EMAIL_USER;
-    const pass = process.env.EMAIL_PASS;
-
-    if (!user || !pass) {
-      console.warn('[ROYMEN Email] Warning: EMAIL_USER and EMAIL_PASS are not configured. Emails will log to terminal fallback only.');
-    }
-
-    // Configure Nodemailer with dynamic settings and detailed logs
-    transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: {
-        user: user || '',
-        pass: pass || ''
-      },
-      debug: true,             // Enable detailed SMTP debugging
-      logger: true,            // Enable detailed SMTP logger
-      connectionTimeout: 60000, // 60 seconds connection timeout
-      greetingTimeout: 60000,   // 60 seconds greeting timeout
-      socketTimeout: 60000      // 60 seconds socket timeout
-    } as any);
-  }
-  return transporter;
-};
+export { sendEmail };
 
 /**
- * 10. Verify SMTP connection directly using verifySmtpConnection helper
+ * Verifies the Brevo API Key connection credentials via HTTP.
+ * Keeps legacy verifySmtpConnection name for server.ts compatibility.
  */
 export async function verifySmtpConnection(): Promise<{
   success: boolean;
@@ -79,207 +19,91 @@ export async function verifySmtpConnection(): Promise<{
   smtpResponse: string;
   authResult: string;
 }> {
-  const host = process.env.EMAIL_HOST || 'smtp-relay.brevo.com';
-  const port = Number(process.env.EMAIL_PORT || '587');
-  const secure = port === 465;
-  const user = process.env.EMAIL_USER || '';
-
-  let resolvedIp = 'Unknown';
-  try {
-    const lookupResult = await dns.promises.lookup(host, { family: 4 });
-    resolvedIp = lookupResult.address;
-  } catch (dnsErr: any) {
-    console.error('[ROYMEN SMTP DNS Resolve Failed]', dnsErr.message || dnsErr);
-  }
-
+  const apiKey = process.env.BREVO_API_KEY;
+  const from = process.env.EMAIL_FROM || 'noreply@roymen.com';
   const startTime = Date.now();
-  let connectionTime = 0;
-  let smtpResponse = 'N/A';
-  let authResult = 'PENDING';
 
-  try {
-    const activeTransporter = getTransporter();
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      const missingErr = new Error('EMAIL_USER or EMAIL_PASS environment variable is missing.');
-      console.error('[ROYMEN SMTP Pre-Verification] Failed: Credentials not configured.');
-      return { 
-        success: false, 
-        error: missingErr,
-        host,
-        port,
-        user,
-        secure,
-        resolvedIp,
-        connectionTime: 0,
-        smtpResponse: 'Credentials missing',
-        authResult: 'FAILED'
-      };
-    }
+  // Task 9: Log hostname, port, secure, and user before verification
+  console.log('=================== BREVO REST API PRE-VERIFY PARAMETERS ===================');
+  console.log(`- Hostname (API URL):   https://api.brevo.com/v3/account`);
+  console.log(`- Connection Port:      443 (HTTPS)`);
+  console.log(`- Secure (TLS/SSL):     true`);
+  console.log(`- Sender Email (User):  ${from}`);
+  console.log(`- API Key Status:       ${apiKey ? 'CONFIGURED (VALUE HIDDEN)' : 'NOT CONFIGURED'}`);
+  console.log('============================================================================');
 
-    const activeHost = (activeTransporter as any).options?.host || host;
-    const activePort = (activeTransporter as any).options?.port || port;
-    const activeSecure = (activeTransporter as any).options?.secure ?? secure;
-    const activeUser = (activeTransporter as any).options?.auth?.user || user;
-
-    console.log('=================== SMTP PRE-VERIFY PARAMETERS ===================');
-    console.log(`- hostname: ${activeHost}`);
-    console.log(`- port:     ${activePort}`);
-    console.log(`- secure:   ${activeSecure}`);
-    console.log(`- user:     ${activeUser}`);
-    console.log('==================================================================');
-
-    console.log('[ROYMEN SMTP Pre-Verification] Executing transporter.verify()...');
-    
-    try {
-      await activeTransporter.verify();
-      connectionTime = Date.now() - startTime;
-      smtpResponse = '250 Connection established and verified successfully.';
-      authResult = 'SUCCESS / PASSED';
-
-      console.log('=================== SMTP DIAGNOSTIC VERIFICATION SUCCESS ===================');
-      console.log(`- SMTP Host:             ${host}`);
-      console.log(`- SMTP Port:             ${port}`);
-      console.log(`- SMTP User:             ${user}`);
-      console.log(`- Secure Mode:           ${secure}`);
-      console.log(`- Resolved IP:           ${resolvedIp}`);
-      console.log(`- Verify Result:         SUCCESS / PASSED`);
-      console.log(`- Connection Time:       ${connectionTime} ms`);
-      console.log(`- SMTP Response:         ${smtpResponse}`);
-      console.log('============================================================================');
-
-      return {
-        success: true,
-        host,
-        port,
-        user,
-        secure,
-        resolvedIp,
-        connectionTime,
-        smtpResponse,
-        authResult
-      };
-    } catch (verifyErr: any) {
-      connectionTime = Date.now() - startTime;
-      smtpResponse = verifyErr.response || verifyErr.message || 'Error occurred during SMTP handshake';
-      authResult = 'FAILED';
-
-      console.error('[ROYMEN SMTP Verify Error Caught via activeTransporter.verify()]');
-      console.error(verifyErr); // Log complete error object
-
-      console.log('=================== SMTP DIAGNOSTIC VERIFICATION FAILURE ===================');
-      console.log(`- SMTP Host:             ${host}`);
-      console.log(`- SMTP Port:             ${port}`);
-      console.log(`- SMTP User:             ${user}`);
-      console.log(`- Secure Mode:           ${secure}`);
-      console.log(`- Resolved IP:           ${resolvedIp}`);
-      console.log(`- Verify Result:         FAILED`);
-      console.log(`- Connection Time:       ${connectionTime} ms`);
-      console.log(`- SMTP Response:         ${smtpResponse}`);
-      console.log('============================================================================');
-      throw verifyErr;
-    }
-  } catch (error: any) {
-    console.error('[ROYMEN SMTP Pre-Verification] Failed with error:', error.message || error);
-    console.error(error); // Log complete error object
-    if (error) {
-      console.error('=================== DETAILED SMTP VERIFY EXCEPTION ===================');
-      console.error(`- ERROR MESSAGE:  ${error.message || 'N/A'}`);
-      console.error(`- SMTP CODE:      ${error.code || 'N/A'}`);
-      console.error(`- COMMAND:        ${error.command || 'N/A'}`);
-      console.error(`- RESPONSE:       ${error.response || 'N/A'}`);
-      console.error(`- RESPONSE CODE:  ${error.responseCode || 'N/A'}`);
-      console.error(`- ERRNO:          ${error.errno || 'N/A'}`);
-      console.error(`- SYSCALL:        ${error.syscall || 'N/A'}`);
-      console.error(`- ADDRESS:        ${error.address || 'N/A'}`);
-      console.error(`- PORT:           ${error.port || 'N/A'}`);
-      console.error(`- STACKTRACE:\n${error.stack || 'N/A'}`);
-      console.error('======================================================================');
-    }
-    return { 
-      success: false, 
-      error,
-      host,
-      port,
-      user,
-      secure,
-      resolvedIp,
-      connectionTime: Date.now() - startTime,
-      smtpResponse: error.response || error.message || 'N/A',
+  if (!apiKey) {
+    const missingErr = new Error('BREVO_API_KEY environment variable is not defined.');
+    console.error('[ROYMEN Brevo Verify] Failed: API Key not configured.');
+    return {
+      success: false,
+      error: missingErr,
+      host: 'api.brevo.com',
+      port: 443,
+      user: from,
+      secure: true,
+      resolvedIp: 'N/A',
+      connectionTime: 0,
+      smtpResponse: 'Brevo API Key is missing in environment.',
       authResult: 'FAILED'
     };
   }
-}
 
-/**
- * Reusable core function to dispatch an email.
- * Always handles errors gracefully to avoid breaking checkout or auth flows.
- */
-export async function sendEmail(to: string, subject: string, html: string, throwOnError?: boolean): Promise<boolean> {
-  const from = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'ROY MEN <noreply@roymen.com>';
   try {
-    const activeTransporter = getTransporter();
-    
-    // If we have no credentials, do a high-performance terminal mock to avoid timing out
-    if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-      console.log(`\n========================================`);
-      console.log(`[ROYMEN EMAIL MOCK] To: ${to}`);
-      console.log(`[ROYMEN EMAIL MOCK] Subject: ${subject}`);
-      console.log(`[ROYMEN EMAIL MOCK] Body length: ${html.length} chars`);
-      console.log(`========================================\n`);
-      return true;
-    }
+    const response = await axios.get('https://api.brevo.com/v3/account', {
+      headers: {
+        'api-key': apiKey,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      timeout: 10000 // 10 seconds timeout
+    });
 
-    const activeHost = (activeTransporter as any).options?.host || 'smtp-relay.brevo.com';
-    const activePort = (activeTransporter as any).options?.port || 587;
-    const activeSecure = (activeTransporter as any).options?.secure ?? false;
-    const activeUser = (activeTransporter as any).options?.auth?.user || '';
+    const connectionTime = Date.now() - startTime;
+    const smtpResponse = `Brevo REST API verified (200 OK). Account: ${response.data.companyName || 'N/A'} (${response.data.email || 'N/A'})`;
 
-    console.log('=================== SMTP SENDMAIL PARAMETERS ===================');
-    console.log(`- hostname: ${activeHost}`);
-    console.log(`- port:     ${activePort}`);
-    console.log(`- secure:   ${activeSecure}`);
-    console.log(`- user:     ${activeUser}`);
-    console.log('================================================================');
+    console.log('=================== BREVO REST API VERIFY SUCCESS ===================');
+    console.log(`- Status Code:       ${response.status} ${response.statusText}`);
+    console.log(`- Connection Time:   ${connectionTime} ms`);
+    console.log(`- Company Name:      ${response.data.companyName || 'N/A'}`);
+    console.log(`- Account Email:     ${response.data.email || 'N/A'}`);
+    console.log(`- Response Payload:  ${JSON.stringify(response.data)}`);
+    console.log('=====================================================================');
 
-    try {
-      await activeTransporter.sendMail({
-        from,
-        to,
-        subject,
-        html
-      });
-    } catch (sendErr: any) {
-      console.error('[ROYMEN SMTP sendMail Error Caught via activeTransporter.sendMail()]');
-      console.error(sendErr); // Log complete error object
-      throw sendErr;
-    }
-    
-    console.log(`[ROYMEN Email] Dispatched successfully to: ${to} | Subject: ${subject}`);
-    return true;
+    return {
+      success: true,
+      host: 'api.brevo.com',
+      port: 443,
+      user: from,
+      secure: true,
+      resolvedIp: 'N/A',
+      connectionTime,
+      smtpResponse,
+      authResult: 'SUCCESS'
+    };
   } catch (error: any) {
-    console.error(`[ROYMEN Email Error] Failed sending email to ${to}:`, error.message || error);
-    console.error(error); // Log complete error object
-    
-    // 11. Improve error logging to display: message, code, command, response, responseCode, errno, syscall, address, port, stack
-    if (error) {
-      console.error('=================== DETAILED SMTP DIAGNOSTIC EXCEPTION ===================');
-      console.error(`- ERROR MESSAGE:  ${error.message || 'N/A'}`);
-      console.error(`- SMTP CODE:      ${error.code || 'N/A'}`);
-      console.error(`- COMMAND:        ${error.command || 'N/A'}`);
-      console.error(`- RESPONSE:       ${error.response || 'N/A'}`);
-      console.error(`- RESPONSE CODE:  ${error.responseCode || 'N/A'}`);
-      console.error(`- ERRNO:          ${error.errno || 'N/A'}`);
-      console.error(`- SYSCALL:        ${error.syscall || 'N/A'}`);
-      console.error(`- ADDRESS:        ${error.address || 'N/A'}`);
-      console.error(`- PORT:           ${error.port || 'N/A'}`);
-      console.error(`- STACKTRACE:\n${error.stack || 'N/A'}`);
-      console.error('==========================================================================');
+    const connectionTime = Date.now() - startTime;
+    console.error('=================== BREVO REST API VERIFY FAILURE ===================');
+    if (error.response) {
+      console.error(`- Status Code:   ${error.response.status}`);
+      console.error(`- Error Payload: ${JSON.stringify(error.response.data)}`);
+    } else {
+      console.error(`- Connection Error: ${error.message}`);
     }
-    
-    if (throwOnError) {
-      throw error;
-    }
-    return false;
+    console.error('=====================================================================');
+
+    return {
+      success: false,
+      error: error.response?.data || error,
+      host: 'api.brevo.com',
+      port: 443,
+      user: from,
+      secure: true,
+      resolvedIp: 'N/A',
+      connectionTime,
+      smtpResponse: error.response ? `API HTTP Error ${error.response.status}` : error.message,
+      authResult: 'FAILED'
+    };
   }
 }
 
@@ -645,8 +469,12 @@ export function getAdminOrderNotificationTemplate(order: any, ip: string = 'N/A'
         <td><strong style="color:red;">${order.paymentMethod.toUpperCase()}</strong></td>
       </tr>
       <tr>
-        <td class="label">Payment State:</td>
+        <td class="label">Payment Status:</td>
         <td>${order.paymentVerified ? '🟢 VERIFIED' : '🔴 PENDING AUDIT'}</td>
+      </tr>
+      <tr>
+        <td class="label">Order Status:</td>
+        <td><span style="background-color: #000; color: #fff; padding: 2px 8px; font-size: 10px; font-weight: bold; text-transform: uppercase;">${order.orderStatus}</span></td>
       </tr>
       <tr>
         <td class="label">Client IP:</td>
@@ -678,7 +506,7 @@ export function getAdminOrderNotificationTemplate(order: any, ip: string = 'N/A'
         </tr>
         <tr>
           <td colspan="3" style="border:none;"></td>
-          <td class="text-right" style="font-weight:bold;">Delivery Fee:</td>
+          <td class="text-right" style="font-weight:bold;">Delivery Charge:</td>
           <td class="text-right font-mono">৳${order.deliveryFee.toLocaleString()}</td>
         </tr>
         ${order.discount > 0 ? `
@@ -771,6 +599,73 @@ export function getOrderStatusTransitionTemplate(order: any, previousStatus: str
     <div style="text-align: center;">
       <a href="${process.env.APP_URL || 'https://roymen.com'}/#/order-tracking" class="btn">Track Order in Real-Time</a>
     </div>
+    ${LUXURY_FOOTER}
+  `;
+}
+
+// 7. Login OTP Email Template
+export function getLoginOtpTemplate(otp: string, name?: string): string {
+  const displayName = name || 'Valued Patron';
+  return `
+    ${LUXURY_HEADER}
+    <h3>PORTAL ACCESS OTP PROTOCOL</h3>
+    <p>Dear ${displayName},</p>
+    <p>We received a request to log in to your ROY MEN account using an OTP security code.</p>
+    <p>Please utilize the secure 6-digit code below to authenticate your identity. This security code is strictly confidential and will self-expire in <strong>5 minutes</strong>.</p>
+    <div style="text-align: center; margin: 30px 0;">
+      <div style="display: inline-block; background-color: #f5f5f5; border: 1px solid #d4af37; padding: 15px 40px; font-size: 28px; font-weight: bold; letter-spacing: 0.25em; color: #000000; font-family: 'Courier New', Courier, monospace;">${otp}</div>
+    </div>
+    <p>If you did not initiate this authentication request, please ignore this email or contact our support concierge to secure your client portal.</p>
+    ${LUXURY_FOOTER}
+  `;
+}
+
+// 8. Register OTP Email Template
+export function getRegisterOtpTemplate(otp: string): string {
+  return `
+    ${LUXURY_HEADER}
+    <h3>REGISTRATION OTP VERIFICATION</h3>
+    <p>Dear Valued Patron,</p>
+    <p>Thank you for initiating your customer registration with <strong>ROY MEN</strong>.</p>
+    <p>To finalize your profile creation and confirm your active email, please use the secure 6-digit registration code below. This code will self-expire in <strong>5 minutes</strong>.</p>
+    <div style="text-align: center; margin: 30px 0;">
+      <div style="display: inline-block; background-color: #f5f5f5; border: 1px solid #d4af37; padding: 15px 40px; font-size: 28px; font-weight: bold; letter-spacing: 0.25em; color: #000000; font-family: 'Courier New', Courier, monospace;">${otp}</div>
+    </div>
+    <p>We are excited to welcome you into an exclusive circle of patrons who value substance and premium craftsmanship.</p>
+    ${LUXURY_FOOTER}
+  `;
+}
+
+// 9. Forgot Password OTP Email Template
+export function getForgotPasswordOtpTemplate(otp: string, name?: string): string {
+  const displayName = name || 'Valued Patron';
+  return `
+    ${LUXURY_HEADER}
+    <h3>RECOVERY CODE PROTOCOL</h3>
+    <p>Dear ${displayName},</p>
+    <p>We received an official request to reset the password associated with your ROY MEN customer profile.</p>
+    <p>To authorize this action, please input the secure 6-digit recovery OTP below. This OTP is strictly confidential and will self-expire in <strong>5 minutes</strong>.</p>
+    <div style="text-align: center; margin: 30px 0;">
+      <div style="display: inline-block; background-color: #f5f5f5; border: 1px solid #d4af37; padding: 15px 40px; font-size: 28px; font-weight: bold; letter-spacing: 0.25em; color: #000000; font-family: 'Courier New', Courier, monospace;">${otp}</div>
+    </div>
+    <p>If you did not initiate this password recovery request, please ignore this email to keep your existing credentials unchanged.</p>
+    ${LUXURY_FOOTER}
+  `;
+}
+
+// 10. Email Verification OTP Template
+export function getEmailVerificationTemplate(otp: string, name?: string): string {
+  const displayName = name || 'Valued Patron';
+  return `
+    ${LUXURY_HEADER}
+    <h3>EMAIL VERIFICATION OTP</h3>
+    <p>Dear ${displayName},</p>
+    <p>Please utilize the secure 6-digit verification code below to confirm and verify ownership of your email address on the ROY MEN portal.</p>
+    <p>This verification token is valid for <strong>5 minutes</strong>.</p>
+    <div style="text-align: center; margin: 30px 0;">
+      <div style="display: inline-block; background-color: #f5f5f5; border: 1px solid #d4af37; padding: 15px 40px; font-size: 28px; font-weight: bold; letter-spacing: 0.25em; color: #000000; font-family: 'Courier New', Courier, monospace;">${otp}</div>
+    </div>
+    <p>Once verified, your client profile will be fully unlocked and authorized for all premium services.</p>
     ${LUXURY_FOOTER}
   `;
 }

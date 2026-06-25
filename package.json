@@ -14,6 +14,7 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
     "@vitejs/plugin-react": "^5.0.4",
+    "axios": "^1.18.1",
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.10.0",
     "cors": "^2.8.6",
@@ -23,7 +24,6 @@
     "lucide-react": "^0.546.0",
     "mongoose": "^9.7.0",
     "motion": "^12.23.24",
-    "nodemailer": "^8.0.11",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "react-router-dom": "^7.17.0",
@@ -35,7 +35,6 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^22.14.0",
-    "@types/nodemailer": "^8.0.1",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.28.1",
     "tailwindcss": "^4.1.14",

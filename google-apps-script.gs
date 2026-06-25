@@ -1,38 +1,38 @@
 /**
  * ============================================================================
- *               ROY MEN - ENTERPRISE ORDER MANAGEMENT DASHBOARD
+ *               ROY MEN - ENTERPRISE ORDER MANAGEMENT SYSTEM
  * ============================================================================
  * 
- * DESIGN PRINCIPLE: Quiet Luxury, Architectural Honesty & Pristine Layouts
- * ENGINEER LEVEL: Senior Google Apps Script Platform Architect
- * TIMEZONE: Asia/Dhaka (Bangladesh Standard Time - BST / GMT+6)
- * 
- * DESCRIPTION:
- * This script serves as the production-grade secure webhook receiver and 
- * business intelligence control panel for the ROY MEN Bangladesh premium 
- * fashion storefront. It automatically initializes a 5-sheet database schema,
- * builds dynamic KPI cards, embeds native charts, applies status dropdowns,
- * formats status-based colors, prevents duplicate order transactions with 
- * lock concurrency, registers metrics, and configures custom export options.
- * 
- * SHEETS INCLUDED:
- * 1. "Dashboard"  - Live operation analytics grid, leaderboards, and query search bar.
- * 2. "Orders"     - Consolidated transaction ledger with status controls.
- * 3. "Reports"    - Dynamic aggregations, time-series, and embedded charts.
- * 4. "Products"   - Performance metric breakdown per product catalog.
- * 5. "Customers"  - Historic spending habits and contact ledger.
- * 6. "Order History" - Historical order status updates tracking sheet.
- * 7. "Payment History" - Historical payment status updates tracking sheet.
- * 8. "Audit Log"   - Universal system and user action tracing engine.
- * 9. "Settings"    - Core enterprise business and charge parameters.
+ * FILE: google-apps-script.gs (Consolidated Production Assembly)
+ * ROLE: Single-File Copy-Paste Distribution
+ * DESIGN THEME: Quiet Luxury (Black, White, Charcoal & Champagne Gold Accent)
+ * PLATFORM: Google Apps Script (V8 Engine Compatible)
+ * AUTHOR: Senior Google Apps Script Platform Architect
  * ============================================================================
  */
 
-// Global Constant Settings
+// ============================================================================
+// PART 1: CONFIG.GS (Centralized Configuration & Constants)
+// ============================================================================
+
+/**
+ * @namespace CONFIG
+ * @description Master configuration object containing system-wide immutable constants.
+ */
 var CONFIG = {
-  TIMEZONE: "Asia/Dhaka",
-  DATE_FORMAT: "yyyy-MM-dd HH:mm:ss",
-  LOCK_TIMEOUT_MS: 15000, // Safe concurrency window for high-traffic drop sales
+  // System Metadata & Core Settings
+  PROJECT_NAME: "ROY MEN Enterprise Order Management System",
+  VERSION: "1.0.0-ENTERPRISE",
+  TIMEZONE: "Asia/Dhaka", // Bangladesh Standard Time (BST)
+  LOCALE: "en-US",
+  
+  // Performance & Concurrency Limits
+  LOCK_TIMEOUT_MS: 30000,      // Safe lock window to handle high concurrent drop sales (30 seconds)
+  CACHE_DEFAULT_TTL: 300,      // Default CacheService expiration in seconds (5 minutes)
+  MAX_RETRIES: 5,             // Number of retries for external HTTP requests
+  BACKOFF_BASE_MS: 1000,       // Base delay in milliseconds for exponential backoff retry
+
+  // Core Google Sheets Names Mapping
   SHEETS: {
     DASHBOARD: "Dashboard",
     ORDERS: "Orders",
@@ -44,1720 +44,2554 @@ var CONFIG = {
     AUDIT_LOG: "Audit Log",
     SETTINGS: "Settings"
   },
-  ORDER_STATUSES: ["Pending", "Confirmed", "Processing", "Packed", "Shipped", "Delivered", "Cancelled", "Returned"],
-  PAYMENT_STATUSES: ["Pending", "Paid", "Failed", "Refunded"],
+
+  // Allowed States (Database Validation Rules)
+  ORDER_STATUSES: [
+    "Pending",
+    "Confirmed",
+    "Processing",
+    "Packed",
+    "Shipped",
+    "Delivered",
+    "Cancelled",
+    "Returned"
+  ],
+
+  PAYMENT_STATUSES: [
+    "Pending",
+    "Paid",
+    "Failed",
+    "Refunded"
+  ],
+
+  // Structured Columns Mapping and Headers Setup
   HEADERS: {
     ORDERS: [
-      "Timestamp", "Order ID", "Order Date", "Customer Name", "Phone", "Email", 
-      "Address", "Division", "District", "Postal Code", "Payment Method", 
-      "Payment Status", "Order Status", "Products", "Sizes", "Colors", "Quantity", 
-      "Unit Price", "Subtotal", "Delivery Charge", "Discount", "Grand Total", 
-      "Courier Name", "Tracking Number", "Tracking URL", "Notes", "Customer IP", "Browser"
+      "Timestamp",           // Col A (1)  - Record insertion timestamp
+      "Order ID",            // Col B (2)  - Primary Key from MongoDB
+      "Order Date",          // Col C (3)  - Original placement date
+      "Customer Name",       // Col D (4)  - Billing/Shipping Name
+      "Phone",               // Col E (5)  - Contact Phone
+      "Email",               // Col F (6)  - Customer Email
+      "Address",             // Col G (7)  - Physical Shipping Address
+      "Division",            // Col H (8)  - Administrative Division
+      "District",            // Col I (9)  - District
+      "Postal Code",         // Col J (10) - ZIP/Postal Code
+      "Payment Method",      // Col K (11) - COD, SSLCommerz, Bkash, etc.
+      "Payment Status",      // Col L (12) - Pending, Paid, Failed, Refunded
+      "Order Status",        // Col M (13) - Active fulfillment status
+      "Products",            // Col N (14) - JSON/String list of products purchased
+      "Sizes",               // Col O (15) - Product sizes purchased
+      "Colors",              // Col P (16) - Product colors purchased
+      "Quantity",            // Col Q (17) - Total items in order
+      "Unit Price",          // Col R (18) - Unit price (individual base)
+      "Subtotal",            // Col S (19) - Cumulative subtotal (৳)
+      "Delivery Charge",     // Col T (20) - Delivery/Shipping Charge (৳)
+      "Discount",            // Col U (21) - Discount applied (৳)
+      "Grand Total",         // Col V (22) - Net total receivable (৳)
+      "Courier Name",        // Col W (23) - Shipping carrier name
+      "Tracking Number",     // Col X (24) - Shipment Tracking identifier
+      "Tracking URL",        // Col Y (25) - Shipment Tracking redirect hyperlink
+      "Notes",               // Col Z (26) - Custom operational annotations
+      "Customer IP",         // Col AA (27)- Client IP address
+      "Browser"              // Col AB (28)- Client browser User-Agent
     ],
-    PRODUCTS: ["Product Name", "Quantity Sold", "Revenue", "First Sold Date", "Last Sold Date", "Average Selling Price", "Best Selling Month"],
-    CUSTOMERS: ["Customer Name", "Phone", "Email", "First Order Date", "Last Order Date", "Lifetime Orders", "Lifetime Spending", "Average Order Value"],
-    ORDER_HISTORY: ["Timestamp", "Order ID", "Previous Status", "New Status", "Changed By"],
-    PAYMENT_HISTORY: ["Timestamp", "Order ID", "Previous Status", "New Status", "Changed By"],
-    AUDIT_LOG: ["Timestamp", "Event Type", "Order ID", "Details"]
+    PRODUCTS: [
+      "Product Name",        // Primary Key - Name of product
+      "Quantity Sold",       // Total quantity purchased across all orders
+      "Revenue",             // Total currency generated by this catalog item
+      "First Sold Date",     // Earliest record of sale
+      "Last Sold Date",      // Most recent record of sale
+      "Average Selling Price",// Derived ASP
+      "Best Selling Month"   // Peak sales volume month (YYYY-MM)
+    ],
+    CUSTOMERS: [
+      "Customer Name",       // Full billing name
+      "Phone",               // Unique customer contact phone (Primary Index)
+      "Email",               // Contact email
+      "First Order Date",    // Onboarding transaction timestamp
+      "Last Order Date",     // Most recent interaction timestamp
+      "Lifetime Orders",     // Cumulative transaction frequency
+      "Lifetime Spending",   // Cumulative net checkout amount
+      "Average Order Value"  // Lifetime Spending / Lifetime Orders
+    ],
+    ORDER_HISTORY: [
+      "Timestamp",           // Date of status adjustment
+      "Order ID",            // Affected order identification reference
+      "Previous Status",     // State transition source
+      "New Status",          // State transition destination
+      "Changed By"           // Agent email or system process responsible
+    ],
+    PAYMENT_HISTORY: [
+      "Timestamp",           // Date of financial update
+      "Order ID",            // Affected order identification reference
+      "Previous Status",     // State transition source
+      "New Status",          // State transition destination
+      "Changed By"           // Agent email or system process responsible
+    ],
+    AUDIT_LOG: [
+      "Timestamp",           // Event execution timestamp
+      "Event Type",          // Class of event (e.g., Security, Data, Sync)
+      "Order ID",            // Contextual order referenced (if applicable)
+      "Details"              // Comprehensive diagnostic trail text
+    ]
+  },
+
+  // Quiet Luxury Visual Identity System (Palette Constants)
+  THEME: {
+    // Brand Colors
+    PRIMARY_DARK: "#0F0F0F",  // Absolute Slate/Black for structural prominence
+    ACCENT_GOLD: "#C5A880",   // Champagne Gold accents for subtle luxury
+    BG_LIGHT_ZEBRA: "#F9F9F9",// Off-white/zinc zebra alternating color
+    BORDER_LIGHT: "#EAEAEA",  // High-end minimalist borders
+    TEXT_MUTED: "#767676",    // Refined charcoal grey for secondary texts
+    TEXT_LIGHT: "#FFFFFF",    // Clear white
+    
+    // Extended Semantic Colors
+    COLOR_SUCCESS: "#1E5A27", // Emerald Hunter Green
+    COLOR_INFO: "#2A4E77",    // Deep Sapphire Navy
+    COLOR_WARNING: "#C46210", // Teracotta Ochre
+    COLOR_ERROR: "#902020",   // Burgundy Wine
+    COLOR_BG_ALERT: "#FAF5EF",// Warm Linen Base
+
+    // Status Highlights
+    STATUS: {
+      PENDING:     { BG: "#FAF5EF", TEXT: "#8B6F4F" }, // Soft Warm Sand
+      CONFIRMED:   { BG: "#F0F4F8", TEXT: "#2A4E77" }, // Crisp Classic Navy
+      PROCESSING:  { BG: "#FAF1E6", TEXT: "#C46210" }, // Muted Teracotta
+      PACKED:      { BG: "#F3EEFA", TEXT: "#5E3B8D" }, // Royal Lavender
+      SHIPPED:     { BG: "#EEFAF7", TEXT: "#1B5E50" }, // Jade Slate
+      DELIVERED:   { BG: "#EDF7ED", TEXT: "#1E5A27" }, // Hunter Green tint
+      CANCELLED:   { BG: "#FAF0F0", TEXT: "#902020" }, // Burgundy Ash
+      RETURNED:    { BG: "#F5F5F5", TEXT: "#555555" }  // Ash Neutral
+    },
+    
+    // Payment States
+    PAYMENT: {
+      PENDING:     { BG: "#FAF0F0", TEXT: "#902020" }, // Burgundy
+      PAID:        { BG: "#EDF7ED", TEXT: "#1E5A27" }, // Hunter Green
+      FAILED:      { BG: "#FAF0F0", TEXT: "#902020" }, // Burgundy
+      REFUNDED:    { BG: "#F5F5F5", TEXT: "#555555" }  // Ash
+    }
+  },
+
+  // Dynamic Dashboard Coordinates
+  DASHBOARD_COORDS: {
+    TITLE_RANGE: "A1:H1",
+    SUBTITLE_RANGE: "A2:H2",
+    KPI_GRID: {
+      REVENUE:       { LABEL: "A4:B4", VALUE: "A5:B5", FORMULA: "=SUM(Orders!V2:V)" },
+      ORDERS:        { LABEL: "D4:E4", VALUE: "D5:E5", FORMULA: "=COUNTA(Orders!B2:B)" },
+      CUSTOMERS:     { LABEL: "A7:B7", VALUE: "A8:B8", FORMULA: "=COUNTA(Customers!B2:B)" },
+      AOV:           { LABEL: "D7:E7", VALUE: "D8:E8", FORMULA: "=AVERAGE(Orders!V2:V)" }
+    },
+    SEARCH_CONSOLES: {
+      INPUT: "G4",
+      BUTTON_SEARCH: "G5",
+      BUTTON_CLEAR: "H5"
+    }
+  },
+
+  // Email Configuration
+  EMAIL_CONFIG: {
+    PROVIDER: "GmailApp",                           // Active sender service ("GmailApp" or "MailApp")
+    SENDER_NAME: "ROY MEN Concierge",              // Brand alias shown on recipient inboxes
+    SENDER_EMAIL: "concierge@roymen.com",          // Outbound sender mask (if authorized alias exists)
+    ADMIN_EMAIL: "admin@roymen.com",                // Dedicated administration notifier inbox
+    OTP_EXPIRY_MS: 300000,                          // Time-to-Live for generated security OTP (5 Minutes)
+    OTP_COOLDOWN_MS: 60000,                         // Time limits between consecutive OTP dispatches (1 Minute)
+    MAX_OTP_REQUESTS_PER_HOUR: 5,                   // Strict rate limit on OTP dispatches per email
+    MAX_OTP_VERIFICATION_ATTEMPTS: 3                // Maximum incorrect tries before lock out
+  },
+
+  // API Configuration (Communication Metrics)
+  API_CONFIG: {
+    VERSION: "v1",                                  // API endpoints major routing version
+    BASE_PATH: "/api/v1",                           // URI base route matching Railway endpoints
+    HEADERS: {
+      API_KEY: "X-ROYMEN-API-KEY",                  // Inbound authentication header
+      SIGNATURE: "X-ROYMEN-SIGNATURE",              // Webhook integrity checksum header
+      TIMESTAMP: "X-ROYMEN-TIMESTAMP"               // Replay attack validation timestamp header
+    },
+    TIMEOUT_MS: 15000,                              // Maximum await limit for outbound requests (15 seconds)
+    RETRY_COUNT: 3,                                 // Maximum retries for non-fatal HTTP connections
+    RETRY_DELAY_MS: 2000                            // Wait window before initiating automatic retry backoff
+  },
+
+  // Queue Configuration (Recovery / Async Resilience)
+  QUEUE: {
+    FAILED_EMAIL: "queue_failed_emails",            // Storage cache key/sheet alias for unsent emails
+    FAILED_SYNC: "queue_failed_syncs",              // Storage cache key/sheet alias for pending DB syncs
+    RETRY_INTERVAL_MINUTES: 5,                      // Frequency of execution for failed task queue runner
+    SIZE_LIMIT: 500                                 // Maximum buffer limit to avoid transaction throttling
+  },
+
+  // Cache Configuration
+  CACHE: {
+    DASHBOARD_KEY: "CACHE_KPI_DASHBOARD_SUMMARY",   // Cache key for primary dashboard cards state
+    CUSTOMER_PREFIX: "CACHE_CUST_INDEX_",           // Base tag for fast customer profile lookup cache
+    PRODUCT_PREFIX: "CACHE_PROD_INDEX_",             // Base tag for catalog metrics compilation cache
+    SETTINGS_KEY: "CACHE_SYSTEM_SETTINGS",          // Cache key for global script parameters
+    ANALYTICS_KEY: "CACHE_METRICS_ANALYTICS"        // Cache key for pre-calculated revenue statistics
+  },
+
+  // Script Properties Keys
+  PROPERTIES_KEYS: {
+    LAST_SYNC: "PROP_SYS_LAST_SYNC_TIMESTAMP",      // Timestamp of the last successful MongoDB database sync
+    LAST_BACKUP: "PROP_SYS_LAST_BACKUP_TIMESTAMP",  // Timestamp of the last successful Google Drive backup
+    TOTAL_ORDERS: "PROP_METRIC_TOTAL_ORDERS_COUNT", // Cacheable cumulative order count
+    FAILED_REQUESTS: "PROP_METRIC_FAILED_REQ_COUNT",// Failure logs counter for system health monitor
+    LAST_DASHBOARD_REFRESH: "PROP_SYS_DASH_REFRESH",// Tracking time of last layout formatting
+    CURRENT_VERSION: "PROP_SYS_DEPLOY_VERSION"      // Holds current active engine configuration version
+  },
+
+  // Automatic Trigger Configuration
+  TRIGGERS: {
+    DASHBOARD_REFRESH_INTERVAL_MIN: 15,             // Auto-refresh layout alignment interval
+    RETRY_QUEUE_INTERVAL_MIN: 5,                    // Resubmit fails queue interval
+    BACKUP_INTERVAL_HOURS: 24,                      // Automatic CSV/Excel spreadsheet archive schedule
+    ANALYTICS_INTERVAL_HOURS: 12                    // Background stats pre-aggregation interval
+  },
+
+  // Business Events Constants
+  EVENTS: {
+    ORDER_CREATED: "EVENT_ORDER_CREATED",           // New sales dispatch trigger
+    ORDER_UPDATED: "EVENT_ORDER_UPDATED",           // Operational correction trigger
+    ORDER_DELETED: "EVENT_ORDER_DELETED",           // Cancellation / Purge event
+    ORDER_STATUS_CHANGED: "EVENT_ORDER_STATUS_CHG", // Transit state transitions trigger
+    PAYMENT_STATUS_CHANGED: "EVENT_PAY_STATUS_CHG", // Financial reconciliation trigger
+    TRACKING_UPDATED: "EVENT_TRACKING_UPDATED",     // Courier integration trigger
+    CUSTOMER_CREATED: "EVENT_CUSTOMER_CREATED",     // First-time purchase onboarding
+    CUSTOMER_UPDATED: "EVENT_CUSTOMER_UPDATED"      // Customer profile adjustments
+  },
+
+  // Comprehensive Email Templates List
+  TEMPLATES: {
+    WELCOME: "TEMPLATE_WELCOME_VIP",               // Exclusive client registration email
+    OTP: "TEMPLATE_SECURITY_OTP",                   // General authorization OTP code
+    VERIFICATION: "TEMPLATE_EMAIL_VERIFICATION",    // Explicit mailbox verification
+    FORGOT_PASSWORD: "TEMPLATE_RECOVERY_OTP",       // Security reset credentials path
+    PASSWORD_CHANGED: "TEMPLATE_REVISED_SECURITY",  // Pass change notification audit
+    CUSTOMER_ORDER: "TEMPLATE_ORDER_CONFIRM",       // Quiet luxury client receipt details
+    ADMIN_ORDER: "TEMPLATE_ADMIN_NOTIFICATION",     // Operational dispatch notification
+    PROCESSING: "TEMPLATE_ORDER_PROCESSING",        // Order manufacturing initiated
+    PACKED: "TEMPLATE_ORDER_PACKED",                // Quality checking and parcel ready
+    SHIPPED: "TEMPLATE_ORDER_SHIPPED",              // Dispatched into transit pipeline
+    DELIVERED: "TEMPLATE_ORDER_DELIVERED",          // Delivered successfully concierge notification
+    CANCELLED: "TEMPLATE_ORDER_CANCELLED",          // Transaction cancelled notification
+    TRACKING_UPDATED: "TEMPLATE_TRACKING_UPDATED"   // Courier routing codes revision
+  },
+
+  // Strict Enterprise Validation Regex Rules
+  VALIDATION: {
+    PHONE_REGEXP: "^(\\+?88)?01[3-9]\\d{8}$",        // Rigorous BD mobile regex match validator
+    EMAIL_REGEXP: "^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$", // Standard RFC email parser
+    POSTAL_CODE_REGEXP: "^\\d{4,5}$",               // Matches standard regional sub-postcodes (BD/Global context)
+    TRACKING_NUMBER_REGEXP: "^[a-zA-Z0-9\\-_]{5,30}$" // Secure routing sequence tracking match
+  },
+
+  // Security Controls Configuration
+  SECURITY: {
+    ALLOWED_ORIGINS: [
+      "https://roymen.com",                         // Corporate domain
+      "https://www.roymen.com",                     // Corporate www
+      "https://roymen-shop.vercel.app"              // Active secure Vercel client deployment
+    ],
+    RATE_LIMIT_PER_MINUTE: 120,                     // Inbound request limits for API
+    MAX_PAYLOAD_SIZE_BYTES: 1048576,                // 1MB request volume protection
+    ALLOWED_METHODS: ["GET", "POST", "PUT", "OPTIONS"] // Strict routing restrictions
+  },
+
+  // System Logging Metrics & Controls
+  LOGGING: {
+    LEVELS: {
+      DEBUG: "DEBUG",
+      INFO: "INFO",
+      WARNING: "WARNING",
+      ERROR: "ERROR",
+      SECURITY: "SECURITY"
+    },
+    MAX_LOG_ROWS: 5000,                             // Self-cleaning limit of logging rows
+    AUDIT_RETENTION_DAYS: 90                       // Regulatory audit trail lifespan
+  },
+
+  // Performance Optimization Controls (Batch Size Metrics)
+  PERFORMANCE: {
+    BATCH_SIZE: 100,                                // Optimal database operations chunk size
+    READ_BATCH_SIZE: 500,                           // Google Sheet rows buffer bulk retrieval
+    WRITE_BATCH_SIZE: 100,                          // Direct transactional append chunk size
+    MAX_EXECUTION_TIME_SECONDS: 300                 // Target termination threshold to evade Google timeouts (5 mins limit)
+  },
+
+  // Backup Configuration (Automated Archives)
+  BACKUP: {
+    FOLDER_NAME: "ROY_MEN_SYSTEM_BACKUPS",          // Destination directory in target Drive
+    INTERVAL_HOURS: 24,                             // Cold storage dispatch frequency
+    MAX_FILES: 30                                   // Keeps historical retention for a full month
+  },
+
+  // Dashboard Configuration (Refresh Intervals)
+  DASHBOARD_CONFIG: {
+    REFRESH_INTERVAL_MIN: 15,                       // Re-draw grid formatting interval
+    KPI_UPDATE_INTERVAL_MIN: 5,                     // Re-calculate sum formulas cache
+    CHART_REFRESH_INTERVAL_MIN: 30                  // Regenerate static visual components
   }
 };
 
-/**
- * AUTOMATIC EDIT EVENT TRACKER
- * Detects manual changes to Order Status or Payment Status, logs histories and updates audit trails.
- */
-function onEdit(e) {
-  if (!e) return;
-  var range = e.range;
-  var sheet = range.getSheet();
-  if (sheet.getName() !== CONFIG.SHEETS.ORDERS) return;
+// ============================================================================
+// PART 2: UTILS.GS (System Utilities & Formatting Helpers)
+// ============================================================================
 
-  var row = range.getRow();
-  var col = range.getColumn();
-  if (row <= 1) return; // Ignore headers
-
-  var orderId = sheet.getRange(row, 2).getValue().toString().trim();
-  var email = Session.getActiveUser().getEmail() || "Admin (Manual)";
-
-  // Check if modified column is one of our target columns:
-  // Col 12: Payment Status
-  // Col 13: Order Status
-  // Col 23: Courier Name
-  // Col 24: Tracking Number
-  // Col 25: Tracking URL
-  // Col 26: Notes
-  var targetCols = [12, 13, 23, 24, 25, 26];
-  var isTargetCol = targetCols.indexOf(col) !== -1;
-
-  if (col === 13) { // Order Status Col M
-    var prevStatus = e.oldValue || "None";
-    var newStatus = range.getValue();
-    logOrderStatusChange(orderId, prevStatus, newStatus, email);
-    logAuditEvent("Status Change", orderId, "Status manual update from '" + prevStatus + "' to '" + newStatus + "' by " + email);
-    
-    // Refresh calculations and charts
-    refreshDashboard();
-  } else if (col === 12) { // Payment Status Col L
-    var prevPay = e.oldValue || "None";
-    var newPay = range.getValue();
-    logPaymentStatusChange(orderId, prevPay, newPay, email);
-    logAuditEvent("Payment Change", orderId, "Payment manual update from '" + prevPay + "' to '" + newPay + "' by " + email);
-    
-    // Refresh calculations and charts
-    refreshDashboard();
-  } else if (isTargetCol) {
-    logAuditEvent("Update", orderId, "Manual cell edit in Column " + col + " by " + email);
-  }
-
-  // If ANY of our target columns were updated, send the webhook sync!
-  if (isTargetCol) {
+var Utils = {
+  /**
+   * Formats a standard JavaScript Date object into Bangladesh Standard Time (BST).
+   * @param {Date} date - The date to format.
+   * @return {string} Formatted string "YYYY-MM-DD HH:mm:ss".
+   */
+  formatDateTimeInDhaka: function(date) {
+    if (!date) date = new Date();
     try {
-      var orderStatus = sheet.getRange(row, 13).getValue().toString().trim();
-      var paymentStatus = sheet.getRange(row, 12).getValue().toString().trim();
-      var courierName = sheet.getRange(row, 23).getValue().toString().trim();
-      var trackingNumber = sheet.getRange(row, 24).getValue().toString().trim();
-      var trackingUrl = sheet.getRange(row, 25).getValue().toString().trim();
-      var notes = sheet.getRange(row, 26).getValue().toString().trim();
-
-      var payload = {
-        orderId: orderId,
-        orderStatus: orderStatus,
-        paymentStatus: paymentStatus,
-        courierName: courierName,
-        trackingNumber: trackingNumber,
-        trackingUrl: trackingUrl,
-        notes: notes,
-        updatedAt: new Date().toISOString()
-      };
-
-      // Call asynchronous/robust sync function
-      syncStatusToBackend(payload);
-    } catch (err) {
-      console.error("Failed building sync payload: " + err);
+      return Utilities.formatDate(date, CONFIG.TIMEZONE, "yyyy-MM-dd HH:mm:ss");
+    } catch (e) {
+      console.error("Error formatting date: " + e.toString());
+      return date.toString();
     }
-  }
-}
+  },
 
-/**
- * DISPATCH WEBHOOK TO MERN BACKEND WITH ROBUST RETRIES & ERROR RESILIENCY
- */
-function syncStatusToBackend(payload) {
-  var backendUrl = getSetting("BACKEND_URL", "");
-  if (!backendUrl) {
-    console.warn("BACKEND_URL not configured in Settings. Skipping server sync.");
-    return;
-  }
+  /**
+   * Helper to build uniform JSON outputs for Google web app requests.
+   * @param {Object} body - Response payload object.
+   * @param {number} statusCode - HTTP status code.
+   * @return {HtmlOutput} JSON formatted output with secure sandbox rules.
+   */
+  createJsonResponse: function(body, statusCode) {
+    var output = ContentService.createTextOutput();
+    output.setMimeType(ContentService.MimeType.JSON);
+    
+    // Add transaction response metadata
+    body.processedAt = this.formatDateTimeInDhaka(new Date());
+    body.statusCode = statusCode || 200;
+    
+    output.setContent(JSON.stringify(body));
+    return output;
+  },
 
-  // Clean trailing slash if present
-  if (backendUrl.substring(backendUrl.length - 1) === "/") {
-    backendUrl = backendUrl.substring(0, backendUrl.length - 1);
-  }
-
-  var url = backendUrl + "/api/orders/sync-status";
-  var apiKey = getSetting("API_KEY", "ROY_MEN_SECURE_API_KEY_2026");
-
-  var options = {
-    method: "post",
-    contentType: "application/json",
-    headers: {
-      "x-api-key": apiKey
-    },
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  };
-
-  var maxRetries = 3;
-  var attempt = 0;
-  var success = false;
-  var responseCode = 0;
-  var errorMsg = "";
-
-  while (attempt < maxRetries && !success) {
-    attempt++;
+  /**
+   * Safe JSON parse helper to prevent server-side exceptions.
+   * @param {string} jsonString - The string to parse.
+   * @return {Object|null} Parsed object or null on failure.
+   */
+  safeJsonParse: function(jsonString) {
+    if (!jsonString) return null;
     try {
-      var response = UrlFetchApp.fetch(url, options);
-      responseCode = response.getResponseCode();
+      return JSON.parse(jsonString);
+    } catch (e) {
+      console.warn("Invalid JSON format caught: " + e.toString());
+      return null;
+    }
+  },
+
+  /**
+   * Generates a clean zebra striping range formatting for sheet grids.
+   * @param {Sheet} sheet - Target Sheet object.
+   * @param {number} startRow - Beginning row index.
+   * @param {number} lastRow - Ending row index.
+   * @param {number} totalCols - Ending column index.
+   */
+  applyZebraStriping: function(sheet, startRow, lastRow, totalCols) {
+    if (lastRow < startRow) return;
+    try {
+      var range = sheet.getRange(startRow, 1, lastRow - startRow + 1, totalCols);
+      range.setBackground("#FFFFFF"); // Default baseline background
       
-      if (responseCode === 200) {
-        success = true;
-        console.log("Successfully synced order " + payload.orderId + " to backend (Attempt " + attempt + ")");
-        logAuditEvent("Sync Success", payload.orderId, "Successfully synchronized status update to backend on attempt " + attempt);
-      } else {
-        errorMsg = "HTTP Response Code " + responseCode + ": " + response.getContentText();
-        console.warn("Sync failed on attempt " + attempt + " with response: " + errorMsg);
-        if (attempt < maxRetries) {
-          Utilities.sleep(Math.pow(2, attempt) * 1000); // Exponential backoff (2s, 4s...)
+      for (var r = startRow; r <= lastRow; r++) {
+        if (r % 2 === 0) {
+          sheet.getRange(r, 1, 1, totalCols).setBackground(CONFIG.THEME.BG_LIGHT_ZEBRA);
         }
       }
     } catch (e) {
-      errorMsg = e.toString();
-      console.error("Sync fetch error on attempt " + attempt + ": " + errorMsg);
-      if (attempt < maxRetries) {
-        Utilities.sleep(Math.pow(2, attempt) * 1000);
-      }
+      console.error("Zebra striping error: " + e.toString());
     }
   }
+};
 
-  if (!success) {
-    // If it failed completely, save to failed queue in Script Properties so we do not lose updates
-    var props = PropertiesService.getScriptProperties();
-    var failedQueue = JSON.parse(props.getProperty("FAILED_SYNC_QUEUE") || "[]");
-    
-    // Check if this orderId is already queued to prevent duplicate entries
-    var existingIdx = -1;
-    for (var i = 0; i < failedQueue.length; i++) {
-      if (failedQueue[i].orderId === payload.orderId) {
-        existingIdx = i;
-        break;
+// ============================================================================
+// PART 3: SETTINGSSERVICE.GS (Global Environment Configuration Manager)
+// ============================================================================
+
+var SettingsService = {
+  /**
+   * Retrieves a corporate configuration or business parameter.
+   * @param {string} key - Parameter configuration name.
+   * @param {any} defaultValue - Fallback value if key is not found.
+   * @return {string} Configured parameter value.
+   */
+  get: function(key, defaultValue) {
+    var cache = CacheService.getScriptCache();
+    var cachedValue = cache.get(CONFIG.CACHE.SETTINGS_KEY + "_" + key);
+    if (cachedValue !== null) {
+      return cachedValue;
+    }
+
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getSheetByName(CONFIG.SHEETS.SETTINGS);
+      if (!sheet) {
+        this.initializeSettingsSheet(ss);
+        return defaultValue;
       }
+
+      var data = sheet.getDataRange().getValues();
+      for (var i = 1; i < data.length; i++) {
+        if (data[i][0] === key) {
+          var val = data[i][1].toString().trim();
+          cache.put(CONFIG.CACHE.SETTINGS_KEY + "_" + key, val, CONFIG.CACHE_DEFAULT_TTL);
+          return val;
+        }
+      }
+    } catch (e) {
+      console.warn("Error reading setting cell: " + e.toString());
+    }
+
+    // Secondary fallback to Script Properties
+    var propVal = PropertiesService.getScriptProperties().getProperty(key);
+    if (propVal !== null) {
+      return propVal;
+    }
+
+    return defaultValue;
+  },
+
+  /**
+   * Safe set/overwrite configuration variable.
+   * @param {string} key - Target key name.
+   * @param {string} value - Value to commit.
+   */
+  set: function(key, value) {
+    var cache = CacheService.getScriptCache();
+    cache.put(CONFIG.CACHE.SETTINGS_KEY + "_" + key, value, CONFIG.CACHE_DEFAULT_TTL);
+
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getSheetByName(CONFIG.SHEETS.SETTINGS);
+      if (sheet) {
+        var data = sheet.getDataRange().getValues();
+        var found = false;
+        for (var i = 1; i < data.length; i++) {
+          if (data[i][0] === key) {
+            sheet.getRange(i + 1, 2).setValue(value);
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          sheet.appendRow([key, value, "Auto-generated parameter"]);
+        }
+      }
+    } catch (e) {
+      console.error("Error writing setting cell: " + e.toString());
+    }
+
+    PropertiesService.getScriptProperties().setProperty(key, value);
+  },
+
+  /**
+   * Initializes the settings sheet with basic core values.
+   */
+  initializeSettingsSheet: function(ss) {
+    var sheet = ss.getSheetByName(CONFIG.SHEETS.SETTINGS);
+    if (!sheet) {
+      sheet = ss.insertSheet(CONFIG.SHEETS.SETTINGS);
+    }
+    sheet.clear();
+    
+    sheet.getRange(1, 1, 1, 3).setValues([["Setting Key", "Value", "Description"]])
+      .setBackground(CONFIG.THEME.PRIMARY_DARK)
+      .setFontColor(CONFIG.THEME.TEXT_LIGHT)
+      .setFontWeight("bold");
+
+    var defaultSettings = [
+      ["BACKEND_URL", "https://roymen-backend.railway.app", "The Railway Express backend root sync URL"],
+      ["API_KEY", "ROY_MEN_SECURE_API_KEY_2026", "Security key header matching MERN server"],
+      ["WEBHOOK_SECRET", "ROY_MEN_WEBHOOK_INTEGRITY_SALT_2026", "HMAC key to check payload checksums"],
+      ["ADMIN_ALERT_EMAIL", "concierge@roymen.com", "Recipient for order dispatch notices"],
+      ["SENDER_EMAIL_MASK", "concierge@roymen.com", "Optional authorized alias for email notifications"]
+    ];
+
+    sheet.getRange(2, 1, defaultSettings.length, 3).setValues(defaultSettings);
+    sheet.autoResizeColumns(1, 3);
+  }
+};
+
+// ============================================================================
+// PART 4: VALIDATIONSERVICE.GS (Data Integrity Guard)
+// ============================================================================
+
+var ValidationService = {
+  /**
+   * Validates a complete Order payload object against standard constraints.
+   */
+  validateOrder: function(p) {
+    var errors = [];
+    
+    if (!p) {
+      return { isValid: false, errors: ["Payload is empty"] };
+    }
+
+    if (!p.orderId || p.orderId.toString().trim() === "") {
+      errors.push("orderId is required and cannot be empty");
     }
     
-    if (existingIdx !== -1) {
-      failedQueue[existingIdx] = payload; // overwrite with latest
+    if (!p.customerName || p.customerName.toString().trim() === "") {
+      errors.push("customerName is required");
+    }
+
+    // Email validation
+    if (p.email && p.email.toString().trim() !== "") {
+      var emailVal = p.email.toString().trim();
+      var emailRegex = new RegExp(CONFIG.VALIDATION.EMAIL_REGEXP);
+      if (!emailRegex.test(emailVal)) {
+        errors.push("Invalid email address format: '" + emailVal + "'");
+      }
     } else {
-      failedQueue.push(payload);
+      errors.push("Email address is required");
     }
-    
-    props.setProperty("FAILED_SYNC_QUEUE", JSON.stringify(failedQueue));
-    console.error("All sync attempts failed for order " + payload.orderId + ". Saved to offline sync queue.");
-    logAuditEvent("Sync Failed", payload.orderId, "Failed syncing to backend. Saved to sync queue for auto-retry. Error: " + errorMsg);
-    recordApiRequest(false);
-  } else {
-    recordApiRequest(true);
+
+    // Phone validation (BD regional prefix standards)
+    if (p.phone && p.phone.toString().trim() !== "") {
+      var phoneVal = p.phone.toString().trim();
+      var phoneRegex = new RegExp(CONFIG.VALIDATION.PHONE_REGEXP);
+      if (!phoneRegex.test(phoneVal)) {
+        errors.push("Invalid mobile number (Must be a valid 11-digit BD carrier format): '" + phoneVal + "'");
+      }
+    } else {
+      errors.push("Phone number is required");
+    }
+
+    // Post Code validation
+    if (p.postalCode && p.postalCode.toString().trim() !== "") {
+      var postalVal = p.postalCode.toString().trim();
+      var postalRegex = new RegExp(CONFIG.VALIDATION.POSTAL_CODE_REGEXP);
+      if (!postalRegex.test(postalVal)) {
+        errors.push("Invalid postal code: '" + postalVal + "'");
+      }
+    }
+
+    return {
+      isValid: errors.length === 0,
+      errors: errors
+    };
   }
-}
+};
 
-/**
- * REPROCESS ANY OFFLINE FAILED SYNC PACKETS AUTOMATICALLY
- */
-function processFailedSyncQueue() {
-  var props = PropertiesService.getScriptProperties();
-  var queueJson = props.getProperty("FAILED_SYNC_QUEUE");
-  if (!queueJson) return;
+// ============================================================================
+// PART 5: SECURITYSERVICE.GS (Handshake & Signature Handlers)
+// ============================================================================
 
-  var failedQueue = JSON.parse(queueJson);
-  if (failedQueue.length === 0) return;
+var SecurityService = {
+  /**
+   * Verifies if the request contains a valid API key header.
+   */
+  verifyApiKey: function(e) {
+    var apiKey = SettingsService.get("API_KEY", "ROY_MEN_SECURE_API_KEY_2026");
+    if (!e || !e.parameter) return false;
 
-  console.log("Found " + failedQueue.length + " pending updates in sync queue. Processing...");
-  var remainingQueue = [];
+    var queryKey = e.parameter.apiKey || e.parameter.api_key;
+    if (queryKey === apiKey) return true;
 
-  for (var i = 0; i < failedQueue.length; i++) {
-    var payload = failedQueue[i];
+    var headers = e.headers || {};
+    var headerKey = headers[CONFIG.API_CONFIG.HEADERS.API_KEY.toLowerCase()] || 
+                    headers["x-api-key"] || 
+                    headers["X-API-KEY"];
+                    
+    if (headerKey === apiKey) return true;
+
+    AuditService.log(
+      CONFIG.LOGGING.LEVELS.SECURITY,
+      null,
+      "Unauthorized API request blocked. Headers: " + JSON.stringify(headers)
+    );
     
-    var backendUrl = getSetting("BACKEND_URL", "");
+    return false;
+  },
+
+  /**
+   * Verifies the HMAC-SHA256 signature of incoming webhooks to guarantee packet integrity.
+   */
+  verifyWebhookSignature: function(e, rawBody) {
+    if (!rawBody) return false;
+    
+    var secret = SettingsService.get("WEBHOOK_SECRET", "ROY_MEN_WEBHOOK_INTEGRITY_SALT_2026");
+    var headers = e.headers || {};
+
+    var clientSignature = headers[CONFIG.API_CONFIG.HEADERS.SIGNATURE.toLowerCase()] || 
+                           headers["x-roymen-signature"] || 
+                           headers["X-ROYMEN-SIGNATURE"];
+
+    if (!clientSignature) {
+      var skipSig = SettingsService.get("SKIP_SIGNATURE_VERIFICATION", "true");
+      if (skipSig === "true") return true;
+      return false;
+    }
+
+    try {
+      var keyBytes = Utilities.newBlob(secret).getBytes();
+      var messageBytes = Utilities.newBlob(rawBody).getBytes();
+      var signatureBytes = Utilities.computeHmacSha256Signature(messageBytes, keyBytes);
+      
+      var calculatedSignature = signatureBytes.map(function(byte) {
+        var val = (byte < 0 ? byte + 256 : byte).toString(16);
+        return val.length === 1 ? "0" + val : val;
+      }).join("");
+
+      if (calculatedSignature === clientSignature) {
+        return true;
+      }
+    } catch (err) {
+      console.error("Signature computation exception: " + err.toString());
+    }
+
+    AuditService.log(
+      CONFIG.LOGGING.LEVELS.SECURITY,
+      null,
+      "HMAC-SHA256 signature verification failed."
+    );
+
+    return false;
+  }
+};
+
+// ============================================================================
+// PART 6: AUDITSERVICE.GS (Clean System Logger)
+// ============================================================================
+
+var AuditService = {
+  /**
+   * Appends an audit track event to the system log ledger.
+   */
+  log: function(eventType, orderId, details) {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getSheetByName(CONFIG.SHEETS.AUDIT_LOG);
+      if (!sheet) {
+        sheet = ss.insertSheet(CONFIG.SHEETS.AUDIT_LOG);
+        sheet.appendRow(CONFIG.HEADERS.AUDIT_LOG);
+        this.applyAuditHeaderStyling(sheet);
+      }
+
+      var timestamp = Utils.formatDateTimeInDhaka(new Date());
+      var rowData = [timestamp, eventType, orderId || "N/A", details];
+      
+      sheet.appendRow(rowData);
+      this.autoPruneLogs(sheet);
+    } catch (e) {
+      console.error("CRITICAL LOGGER EXCEPTION: " + e.toString());
+    }
+  },
+
+  applyAuditHeaderStyling: function(sheet) {
+    sheet.getRange(1, 1, 1, CONFIG.HEADERS.AUDIT_LOG.length)
+      .setBackground(CONFIG.THEME.PRIMARY_DARK)
+      .setFontColor(CONFIG.THEME.TEXT_LIGHT)
+      .setFontWeight("bold")
+      .setFontFamily("Inter");
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, CONFIG.HEADERS.AUDIT_LOG.length);
+  },
+
+  autoPruneLogs: function(sheet) {
+    var maxRows = CONFIG.LOGGING.MAX_LOG_ROWS;
+    var lastRow = sheet.getLastRow();
+    
+    if (lastRow > maxRows) {
+      var excessRows = lastRow - maxRows;
+      sheet.deleteRows(2, excessRows);
+      
+      var timestamp = Utils.formatDateTimeInDhaka(new Date());
+      sheet.appendRow([
+        timestamp,
+        CONFIG.LOGGING.LEVELS.INFO,
+        "SYSTEM",
+        "Pruning executed successfully. Cleaned up " + excessRows + " stale historical audit trails."
+      ]);
+    }
+  }
+};
+
+// ============================================================================
+// PART 7: HISTORYSERVICE.GS (State Transitions Ledger)
+// ============================================================================
+
+var HistoryService = {
+  /**
+   * Appends an entry tracking changes to an order's fulfillment state.
+   */
+  logOrderStatus: function(orderId, prevStatus, newStatus, changedBy) {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getSheetByName(CONFIG.SHEETS.ORDER_HISTORY);
+      if (!sheet) {
+        sheet = ss.insertSheet(CONFIG.SHEETS.ORDER_HISTORY);
+        sheet.appendRow(CONFIG.HEADERS.ORDER_HISTORY);
+        this.applyHeaderStyling(sheet, CONFIG.HEADERS.ORDER_HISTORY.length);
+      }
+
+      var timestamp = Utils.formatDateTimeInDhaka(new Date());
+      sheet.appendRow([timestamp, orderId, prevStatus || "None", newStatus, changedBy || "System Process"]);
+      
+      var lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        Utils.applyZebraStriping(sheet, 2, lastRow, CONFIG.HEADERS.ORDER_HISTORY.length);
+      }
+    } catch (e) {
+      console.error("Error logging Order status change: " + e.toString());
+    }
+  },
+
+  /**
+   * Appends an entry tracking changes to an order's payment/billing state.
+   */
+  logPaymentStatus: function(orderId, prevStatus, newStatus, changedBy) {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getSheetByName(CONFIG.SHEETS.PAYMENT_HISTORY);
+      if (!sheet) {
+        sheet = ss.insertSheet(CONFIG.SHEETS.PAYMENT_HISTORY);
+        sheet.appendRow(CONFIG.HEADERS.PAYMENT_HISTORY);
+        this.applyHeaderStyling(sheet, CONFIG.HEADERS.PAYMENT_HISTORY.length);
+      }
+
+      var timestamp = Utils.formatDateTimeInDhaka(new Date());
+      sheet.appendRow([timestamp, orderId, prevStatus || "None", newStatus, changedBy || "System Process"]);
+      
+      var lastRow = sheet.getLastRow();
+      if (lastRow > 1) {
+        Utils.applyZebraStriping(sheet, 2, lastRow, CONFIG.HEADERS.PAYMENT_HISTORY.length);
+      }
+    } catch (e) {
+      console.error("Error logging Payment status change: " + e.toString());
+    }
+  },
+
+  applyHeaderStyling: function(sheet, totalCols) {
+    sheet.getRange(1, 1, 1, totalCols)
+      .setBackground(CONFIG.THEME.PRIMARY_DARK)
+      .setFontColor(CONFIG.THEME.TEXT_LIGHT)
+      .setFontWeight("bold")
+      .setFontFamily("Inter");
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, totalCols);
+  }
+};
+
+// ============================================================================
+// PART 8: CUSTOMERSERVICE.GS (Customer Demographics Pivot)
+// ============================================================================
+
+var CustomerService = {
+  /**
+   * Recalculates and bulk syncs customer statistics from the primary Orders sheet.
+   */
+  reindexAllCustomers: function() {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var ordersSheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
+      var customersSheet = ss.getSheetByName(CONFIG.SHEETS.CUSTOMERS);
+      
+      if (!ordersSheet) return;
+      if (!customersSheet) {
+        customersSheet = ss.insertSheet(CONFIG.SHEETS.CUSTOMERS);
+      }
+
+      var ordersData = ordersSheet.getDataRange().getValues();
+      if (ordersData.length <= 1) return;
+
+      var colCustomerName = 3;  // Col D (0-indexed)
+      var colPhone = 4;         // Col E
+      var colEmail = 5;         // Col F
+      var colOrderDate = 2;     // Col C
+      var colGrandTotal = 21;   // Col V
+
+      var customerMap = {};
+
+      for (var i = 1; i < ordersData.length; i++) {
+        var row = ordersData[i];
+        var rawPhone = row[colPhone] ? row[colPhone].toString().trim() : "";
+        if (!rawPhone) continue;
+
+        var name = row[colCustomerName] || "Guest Customer";
+        var email = row[colEmail] || "N/A";
+        var dateVal = row[colOrderDate];
+        var total = Number(row[colGrandTotal]) || 0;
+
+        var orderDate = (dateVal instanceof Date) ? dateVal : new Date(dateVal);
+        if (isNaN(orderDate.getTime())) orderDate = new Date();
+
+        if (!customerMap[rawPhone]) {
+          customerMap[rawPhone] = {
+            name: name,
+            phone: rawPhone,
+            email: email,
+            firstOrder: orderDate,
+            lastOrder: orderDate,
+            count: 1,
+            spend: total
+          };
+        } else {
+          var entry = customerMap[rawPhone];
+          entry.count += 1;
+          entry.spend += total;
+          
+          if (orderDate < entry.firstOrder) entry.firstOrder = orderDate;
+          if (orderDate > entry.lastOrder) entry.lastOrder = orderDate;
+          
+          if (name !== "Guest Customer") entry.name = name;
+          if (email !== "N/A") entry.email = email;
+        }
+      }
+
+      var writeBuffer = [];
+      for (var key in customerMap) {
+        var entry = customerMap[key];
+        var aov = entry.count > 0 ? (entry.spend / entry.count) : 0;
+        
+        writeBuffer.push([
+          entry.name,
+          entry.phone,
+          entry.email,
+          Utils.formatDateTimeInDhaka(entry.firstOrder).substring(0, 10),
+          Utils.formatDateTimeInDhaka(entry.lastOrder).substring(0, 10),
+          entry.count,
+          Math.round(entry.spend),
+          Math.round(aov)
+        ]);
+      }
+
+      writeBuffer.sort(function(a, b) { return b[6] - a[6]; });
+
+      customersSheet.clear();
+      customersSheet.appendRow(CONFIG.HEADERS.CUSTOMERS);
+      
+      if (writeBuffer.length > 0) {
+        customersSheet.getRange(2, 1, writeBuffer.length, CONFIG.HEADERS.CUSTOMERS.length).setValues(writeBuffer);
+        
+        var maxRow = writeBuffer.length + 1;
+        customersSheet.getRange(2, 7, writeBuffer.length, 2).setNumberFormat("৳#,##0");
+        Utils.applyZebraStriping(customersSheet, 2, maxRow, CONFIG.HEADERS.CUSTOMERS.length);
+      }
+
+      this.applyCustomerFormatting(customersSheet);
+    } catch (e) {
+      console.error("Critical customer indexing failed: " + e.toString());
+    }
+  },
+
+  applyCustomerFormatting: function(sheet) {
+    sheet.getRange(1, 1, 1, CONFIG.HEADERS.CUSTOMERS.length)
+      .setBackground(CONFIG.THEME.PRIMARY_DARK)
+      .setFontColor(CONFIG.THEME.TEXT_LIGHT)
+      .setFontWeight("bold")
+      .setFontFamily("Inter");
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, CONFIG.HEADERS.CUSTOMERS.length);
+  }
+};
+
+// ============================================================================
+// PART 9: PRODUCTSERVICE.GS (Product Performance Aggregator)
+// ============================================================================
+
+var ProductService = {
+  /**
+   * Compiles sales statistics for every product item.
+   */
+  reindexAllProducts: function() {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var ordersSheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
+      var productsSheet = ss.getSheetByName(CONFIG.SHEETS.PRODUCTS);
+      
+      if (!ordersSheet) return;
+      if (!productsSheet) {
+        productsSheet = ss.insertSheet(CONFIG.SHEETS.PRODUCTS);
+      }
+
+      var ordersData = ordersSheet.getDataRange().getValues();
+      if (ordersData.length <= 1) return;
+
+      var colProducts = 13;     // Col N (0-indexed)
+      var colQty = 16;          // Col Q
+      var colUnitPrice = 17;    // Col R
+      var colOrderDate = 2;     // Col C
+
+      var productMap = {};
+
+      for (var i = 1; i < ordersData.length; i++) {
+        var row = ordersData[i];
+        var rawProducts = row[colProducts] ? row[colProducts].toString().trim() : "";
+        if (!rawProducts) continue;
+
+        var totalQty = Number(row[colQty]) || 1;
+        var unitPrice = Number(row[colUnitPrice]) || 0;
+        var dateVal = row[colOrderDate];
+
+        var orderDate = (dateVal instanceof Date) ? dateVal : new Date(dateVal);
+        if (isNaN(orderDate.getTime())) orderDate = new Date();
+
+        var items = rawProducts.split(/[,;\n]+/);
+        var itemCount = items.length;
+        
+        var splitQty = Math.max(1, Math.round(totalQty / itemCount));
+        var revenueAllocation = (unitPrice * totalQty) / itemCount;
+
+        for (var j = 0; j < items.length; j++) {
+          var prodName = items[j].toString().trim();
+          if (prodName === "") continue;
+
+          var monthKey = Utils.formatDateTimeInDhaka(orderDate).substring(0, 7);
+
+          if (!productMap[prodName]) {
+            productMap[prodName] = {
+              name: prodName,
+              qty: splitQty,
+              revenue: revenueAllocation,
+              firstSold: orderDate,
+              lastSold: orderDate,
+              monthlySales: {}
+            };
+            productMap[prodName].monthlySales[monthKey] = splitQty;
+          } else {
+            var entry = productMap[prodName];
+            entry.qty += splitQty;
+            entry.revenue += revenueAllocation;
+            
+            if (orderDate < entry.firstSold) entry.firstSold = orderDate;
+            if (orderDate > entry.lastSold) entry.lastSold = orderDate;
+            
+            if (!entry.monthlySales[monthKey]) {
+              entry.monthlySales[monthKey] = splitQty;
+            } else {
+              entry.monthlySales[monthKey] += splitQty;
+            }
+          }
+        }
+      }
+
+      var writeBuffer = [];
+      for (var name in productMap) {
+        var entry = productMap[name];
+        var asp = entry.qty > 0 ? (entry.revenue / entry.qty) : 0;
+        
+        var peakMonth = "N/A";
+        var maxMonthQty = -1;
+        for (var m in entry.monthlySales) {
+          if (entry.monthlySales[m] > maxMonthQty) {
+            maxMonthQty = entry.monthlySales[m];
+            peakMonth = m;
+          }
+        }
+
+        writeBuffer.push([
+          entry.name,
+          entry.qty,
+          Math.round(entry.revenue),
+          Utils.formatDateTimeInDhaka(entry.firstSold).substring(0, 10),
+          Utils.formatDateTimeInDhaka(entry.lastSold).substring(0, 10),
+          Math.round(asp),
+          peakMonth
+        ]);
+      }
+
+      writeBuffer.sort(function(a, b) { return b[2] - a[2]; });
+
+      productsSheet.clear();
+      productsSheet.appendRow(CONFIG.HEADERS.PRODUCTS);
+
+      if (writeBuffer.length > 0) {
+        productsSheet.getRange(2, 1, writeBuffer.length, CONFIG.HEADERS.PRODUCTS.length).setValues(writeBuffer);
+        
+        var maxRow = writeBuffer.length + 1;
+        productsSheet.getRange(2, 3, writeBuffer.length, 1).setNumberFormat("৳#,##0");
+        productsSheet.getRange(2, 6, writeBuffer.length, 1).setNumberFormat("৳#,##0");
+        Utils.applyZebraStriping(productsSheet, 2, maxRow, CONFIG.HEADERS.PRODUCTS.length);
+      }
+
+      this.applyProductFormatting(productsSheet);
+    } catch (e) {
+      console.error("Critical product indexing failed: " + e.toString());
+    }
+  },
+
+  applyProductFormatting: function(sheet) {
+    sheet.getRange(1, 1, 1, CONFIG.HEADERS.PRODUCTS.length)
+      .setBackground(CONFIG.THEME.PRIMARY_DARK)
+      .setFontColor(CONFIG.THEME.TEXT_LIGHT)
+      .setFontWeight("bold")
+      .setFontFamily("Inter");
+    sheet.setFrozenRows(1);
+    sheet.autoResizeColumns(1, CONFIG.HEADERS.PRODUCTS.length);
+  }
+};
+
+// ============================================================================
+// PART 10: TEMPLATES.GS (Quiet Luxury Email Builder)
+// ============================================================================
+
+var Templates = {
+  /**
+   * Primary wrapper that applies the premium Quiet Luxury layout surrounding any content block.
+   */
+  getWrapper: function(title, bodyHtml) {
+    return (
+      '<!DOCTYPE html>' +
+      '<html>' +
+      '<head>' +
+      '  <meta charset="utf-8">' +
+      '  <meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+      '  <title>' + title + '</title>' +
+      '  <style>' +
+      '    body { font-family: "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif; background-color: #F9F9F9; margin: 0; padding: 0; color: #1A1A1A; -webkit-font-smoothing: antialiased; }' +
+      '    .wrapper { width: 100%; table-layout: fixed; background-color: #F9F9F9; padding: 40px 0; }' +
+      '    .container { max-width: 600px; margin: 0 auto; background-color: #FFFFFF; border: 1px solid #EAEAEA; box-shadow: 0 4px 12px rgba(0,0,0,0.02); }' +
+      '    .header { background-color: #0F0F0F; padding: 40px; text-align: center; border-bottom: 3px solid #C5A880; }' +
+      '    .header h1 { color: #FFFFFF; font-size: 24px; font-weight: 500; letter-spacing: 4px; margin: 0; text-transform: uppercase; }' +
+      '    .content { padding: 48px 40px; line-height: 1.6; font-size: 15px; color: #333333; }' +
+      '    .content h2 { font-size: 18px; font-weight: 500; letter-spacing: 1px; color: #0F0F0F; margin-top: 0; margin-bottom: 24px; text-transform: uppercase; border-bottom: 1px solid #EAEAEA; padding-bottom: 8px; }' +
+      '    .content p { margin: 0 0 16px 0; }' +
+      '    .button-container { text-align: center; margin: 32px 0; }' +
+      '    .button { display: inline-block; background-color: #0F0F0F; color: #FFFFFF !important; text-decoration: none; padding: 14px 36px; font-size: 13px; font-weight: 500; letter-spacing: 2px; text-transform: uppercase; border: 1px solid #0F0F0F; transition: all 0.2s ease; }' +
+      '    .invoice-table { width: 100%; border-collapse: collapse; margin: 24px 0; font-size: 14px; }' +
+      '    .invoice-table th { text-align: left; padding: 12px; border-bottom: 1px solid #0F0F0F; font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }' +
+      '    .invoice-table td { padding: 12px; border-bottom: 1px solid #F0F0F0; }' +
+      '    .invoice-table .total-row td { border-top: 1px solid #0F0F0F; border-bottom: none; font-weight: 600; font-size: 15px; }' +
+      '    .footer { background-color: #F9F9F9; padding: 32px 40px; text-align: center; border-top: 1px solid #EAEAEA; font-size: 11px; color: #767676; letter-spacing: 1px; line-height: 1.8; }' +
+      '    .footer a { color: #0F0F0F; text-decoration: none; font-weight: 500; }' +
+      '    .status-badge { display: inline-block; padding: 4px 10px; font-size: 11px; font-weight: 500; letter-spacing: 1px; text-transform: uppercase; border-radius: 2px; }' +
+      '  </style>' +
+      '</head>' +
+      '<body>' +
+      '  <div class="wrapper">' +
+      '    <table class="container" cellpadding="0" cellspacing="0" border="0">' +
+      '      <tr>' +
+      '        <td class="header">' +
+      '          <h1>ROY MEN</h1>' +
+      '          <div style="color: #C5A880; font-size: 10px; letter-spacing: 2px; margin-top: 8px; text-transform: uppercase;">Dhaka &bull; London</div>' +
+      '        </td>' +
+      '      </tr>' +
+      '      <tr>' +
+      '        <td class="content">' +
+      '          ' + bodyHtml +
+      '        </td>' +
+      '      </tr>' +
+      '      <tr>' +
+      '        <td class="footer">' +
+      '          This is an automated communication regarding your interaction with the ROY MEN online store.<br>' +
+      '          &copy; ' + new Date().getFullYear() + ' ROY MEN Bangladesh. All rights reserved.<br>' +
+      '          Need assistance? Contact our digital concierge at <a href="mailto:concierge@roymen.com">concierge@roymen.com</a>' +
+      '        </td>' +
+      '      </tr>' +
+      '    </table>' +
+      '  </div>' +
+      '</body>' +
+      '</html>'
+    );
+  },
+
+  /**
+   * Generates a receipt HTML invoice table.
+   */
+  buildInvoiceTable: function(p) {
+    var items = p.products ? p.products.split(/[,;\n]+/) : ["Standard Product"];
+    var sizes = p.sizes ? p.sizes.split(/[,;\n]+/) : ["N/A"];
+    var colors = p.colors ? p.colors.split(/[,;\n]+/) : ["N/A"];
+    
+    var rowsHtml = "";
+    var subtotal = Number(p.subtotal) || 0;
+    var shipping = Number(p.deliveryCharge) || 0;
+    var discount = Number(p.discount) || 0;
+    var grandTotal = Number(p.grandTotal) || (subtotal + shipping - discount);
+
+    for (var i = 0; i < items.length; i++) {
+      var name = items[i] || "Item";
+      var size = sizes[i] || "Standard";
+      var color = colors[i] || "Standard";
+      rowsHtml += (
+        '<tr>' +
+        '  <td>' +
+        '    <div style="font-weight: 500; color: #0F0F0F;">' + name + '</div>' +
+        '    <div style="font-size: 12px; color: #767676; margin-top: 2px;">Size: ' + size + ' &bull; Color: ' + color + '</div>' +
+        '  </td>' +
+        '  <td style="text-align: right; vertical-align: middle;">1</td>' +
+        '</tr>'
+      );
+    }
+
+    return (
+      '<table class="invoice-table">' +
+      '  <thead>' +
+      '    <tr>' +
+      '      <th style="width: 70%;">Item Description</th>' +
+      '      <th style="width: 30%; text-align: right;">Qty</th>' +
+      '    </tr>' +
+      '  </thead>' +
+      '  <tbody>' +
+      '    ' + rowsHtml +
+      '    <tr style="border-top: 1px solid #EAEAEA;">' +
+      '      <td style="text-align: right; color: #767676; padding: 8px 12px 4px 12px;">Subtotal</td>' +
+      '      <td style="text-align: right; font-weight: 500; padding: 8px 12px 4px 12px;">৳' + Math.round(subtotal) + '</td>' +
+      '    </tr>' +
+      '    <tr>' +
+      '      <td style="text-align: right; color: #767676; padding: 4px 12px;">Delivery Charge</td>' +
+      '      <td style="text-align: right; font-weight: 500; padding: 4px 12px;">৳' + Math.round(shipping) + '</td>' +
+      '    </tr>' +
+      '    ' + (discount > 0 ? (
+      '    <tr>' +
+      '      <td style="text-align: right; color: #902020; padding: 4px 12px;">Discount Applied</td>' +
+      '      <td style="text-align: right; color: #902020; font-weight: 500; padding: 4px 12px;">-৳' + Math.round(discount) + '</td>' +
+      '    </tr>') : '') +
+      '    <tr class="total-row">' +
+      '      <td style="text-align: right; padding-top: 12px;">Grand Total</td>' +
+      '      <td style="text-align: right; color: #0F0F0F; padding-top: 12px;">৳' + Math.round(grandTotal) + '</td>' +
+      '    </tr>' +
+      '  </tbody>' +
+      '</table>'
+    );
+  },
+
+  getWelcome: function(customerName) {
+    var body = (
+      '<h2>Welcome to ROY MEN</h2>' +
+      '<p>Dear ' + customerName + ',</p>' +
+      '<p>Thank you for expressing interest in ROY MEN. We are honored to welcome you into our select collective of clients who appreciate timeless, structured elegance.</p>' +
+      '<p>Your account is now registered. As a member of our digital concierge portal, you will be granted early priority access to our upcoming collections.</p>' +
+      '<div class="button-container">' +
+      '  <a href="https://roymen.com" class="button" target="_blank">Enter Studio</a>' +
+      '</div>'
+    );
+    return this.getWrapper("Welcome to ROY MEN", body);
+  },
+
+  getOtp: function(otpCode) {
+    var body = (
+      '<h2>Security Access Code</h2>' +
+      '<p>A secure access request was registered from your terminal. Please use the following OTP passcode to authenticate your login.</p>' +
+      '<div style="text-align: center; margin: 32px 0; background-color: #F5F5F5; border-left: 4px solid #C5A880; padding: 20px;">' +
+      '  <span style="font-family: \'Courier New\', Courier, monospace; font-size: 28px; font-weight: bold; letter-spacing: 6px; color: #0F0F0F;">' + otpCode + '</span>' +
+      '</div>' +
+      '<p style="font-size: 12px; color: #767676;">This authorization code is strictly valid for the next 5 minutes.</p>'
+    );
+    return this.getWrapper("Secure Passcode", body);
+  },
+
+  getOrderStatusEmail: function(p, status) {
+    var title = "Order Update";
+    var trackingText = "";
+    var messageText = "";
+
+    switch (status) {
+      case "Pending":
+        title = "Order Confirmed";
+        messageText = "Your order has been registered in our ledger. Our studio associates are checking items to verify quality standards.";
+        break;
+      case "Confirmed":
+        title = "Order Verified";
+        messageText = "Your purchase transaction has been confirmed. Your items have been allocated and marked for packaging.";
+        break;
+      case "Processing":
+        title = "Processing Initiated";
+        messageText = "Your selection is currently entering our premium manufacturing/preparation queue. Tailoring, stitching, and finishing processes are underway.";
+        break;
+      case "Packed":
+        title = "Parcel Sealed";
+        messageText = "Quality checks are complete. Your item has been wrapped and sealed in our bespoke minimal packaging, ready for distribution.";
+        break;
+      case "Shipped":
+        title = "In Transit";
+        messageText = "Your shipment has been dispatched. A courier concierge is routing the parcel to your delivery address.";
+        if (p.trackingNumber) {
+          trackingText = (
+            '<div style="margin: 24px 0; padding: 20px; background-color: #FAF5EF; border: 1px solid #EAEAEA;">' +
+            '  <div style="font-size: 11px; text-transform: uppercase; color: #767676; letter-spacing: 1px;">Courier Partner</div>' +
+            '  <div style="font-size: 15px; font-weight: 500; color: #0F0F0F; margin-top: 4px;">' + (p.courierName || "Local Delivery Partner") + '</div>' +
+            '  <div style="font-size: 11px; text-transform: uppercase; color: #767676; letter-spacing: 1px; margin-top: 12px;">Tracking Number</div>' +
+            '  <div style="font-size: 14px; font-family: monospace; color: #0F0F0F; margin-top: 4px;">' + p.trackingNumber + '</div>' +
+            '</div>' +
+            (p.trackingUrl ? (
+            '<div class="button-container">' +
+            '  <a href="' + p.trackingUrl + '" class="button" target="_blank">Track Shipment</a>' +
+            '</div>') : '')
+          );
+        }
+        break;
+      case "Delivered":
+        title = "Delivered";
+        messageText = "Our courier concierge reports that your package was delivered successfully. We hope your selection meets your highest standards.";
+        break;
+      case "Cancelled":
+        title = "Order Cancelled";
+        messageText = "Your order has been cancelled and removed from active fulfillment.";
+        break;
+      default:
+        messageText = "Your order status was updated to " + status + ".";
+    }
+
+    var body = (
+      '<h2>' + title + '</h2>' +
+      '<p>Dear ' + p.customerName + ',</p>' +
+      '<p>We are writing to update you on your order <strong style="font-family: monospace; color: #0F0F0F;">#' + p.orderId + '</strong>.</p>' +
+      '<p>' + messageText + '</p>' +
+      '  <span class="status-badge" style="background-color: ' + CONFIG.THEME.STATUS[status.toUpperCase()].BG + '; color: ' + CONFIG.THEME.STATUS[status.toUpperCase()].TEXT + ';">Status: ' + status + '</span>' +
+      '  ' + trackingText +
+      '  <h3 style="margin-top: 32px; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; color: #0F0F0F;">Summary of Purchase</h3>' +
+      '  ' + this.buildInvoiceTable(p)
+    );
+
+    return this.getWrapper(title + " #" + p.orderId, body);
+  },
+
+  getAdminNotification: function(p) {
+    var body = (
+      '<h2>[ADMIN] New Order Logged</h2>' +
+      '<p>An order was received from the Railway web app server. Details have been safely logged into the active Google Sheets Database.</p>' +
+      '<table style="width: 100%; border-collapse: collapse; font-size: 13px; margin: 20px 0;">' +
+      '  <tr><td style="padding: 6px 0; color: #767676; font-weight: bold; width: 35%;">Order ID</td><td style="padding: 6px 0; font-family: monospace;">' + p.orderId + '</td></tr>' +
+      '  <tr><td style="padding: 6px 0; color: #767676; font-weight: bold;">Client Name</td><td style="padding: 6px 0;">' + p.customerName + '</td></tr>' +
+      '  <tr><td style="padding: 6px 0; color: #767676; font-weight: bold;">Phone</td><td style="padding: 6px 0;">' + p.phone + '</td></tr>' +
+      '  <tr><td style="padding: 6px 0; color: #767676; font-weight: bold;">Email</td><td style="padding: 6px 0;">' + p.email + '</td></tr>' +
+      '  <tr><td style="padding: 6px 0; color: #767676; font-weight: bold;">Grand Total</td><td style="padding: 6px 0; font-weight: bold;">৳' + p.grandTotal + '</td></tr>' +
+      '</table>' +
+      '<div class="button-container">' +
+      '  <a href="' + SpreadsheetApp.getActiveSpreadsheet().getUrl() + '" class="button" target="_blank">Open Sheets Ledger</a>' +
+      '</div>'
+    );
+    return this.getWrapper("New Order Alert", body);
+  }
+};
+
+// ============================================================================
+// PART 11: EMAILSERVICE.GS (Quotas and Errors Resiliency Engine)
+// ============================================================================
+
+var EmailService = {
+  /**
+   * Universal sending engine wrapping MailApp and GmailApp in protective try-catch.
+   */
+  send: function(recipient, subject, htmlBody) {
+    if (!recipient) return false;
+    
+    var senderName = CONFIG.EMAIL_CONFIG.SENDER_NAME;
+    var senderMask = SettingsService.get("SENDER_EMAIL_MASK", "");
+    var provider = CONFIG.EMAIL_CONFIG.PROVIDER;
+
+    var mailOptions = {
+      to: recipient,
+      subject: subject,
+      htmlBody: htmlBody,
+      name: senderName
+    };
+
+    if (senderMask && senderMask !== "") {
+      mailOptions.from = senderMask;
+    }
+
+    try {
+      if (provider === "GmailApp") {
+        GmailApp.sendEmail(recipient, subject, "", mailOptions);
+      } else {
+        MailApp.sendEmail(mailOptions);
+      }
+      return true;
+    } catch (err) {
+      console.error("EMAIL SERVICE ERROR: " + err.toString());
+      AuditService.log(
+        CONFIG.LOGGING.LEVELS.ERROR,
+        null,
+        "Failed emailing to " + recipient + ". Message: " + err.toString()
+      );
+      this.queueFailedEmail(recipient, subject, htmlBody);
+      return false;
+    }
+  },
+
+  sendOrderStatusNotification: function(orderPayload, status) {
+    if (!orderPayload.email) return;
+    var subject = "ROY MEN Order Update #" + orderPayload.orderId + " [" + status + "]";
+    var htmlContent = Templates.getOrderStatusEmail(orderPayload, status);
+    this.send(orderPayload.email, subject, htmlContent);
+  },
+
+  sendAdminAlertNotification: function(orderPayload) {
+    var adminEmail = SettingsService.get("ADMIN_ALERT_EMAIL", CONFIG.EMAIL_CONFIG.ADMIN_EMAIL);
+    var subject = "[ALERT] New Sales Invoice #" + orderPayload.orderId;
+    var htmlContent = Templates.getAdminNotification(orderPayload);
+    this.send(adminEmail, subject, htmlContent);
+  },
+
+  queueFailedEmail: function(recipient, subject, htmlBody) {
+    try {
+      var props = PropertiesService.getScriptProperties();
+      var failedQueue = JSON.parse(props.getProperty(CONFIG.QUEUE.FAILED_EMAIL) || "[]");
+      if (failedQueue.length >= CONFIG.QUEUE.SIZE_LIMIT) {
+        failedQueue.shift();
+      }
+      failedQueue.push({
+        recipient: recipient,
+        subject: subject,
+        htmlBody: htmlBody,
+        timestamp: new Date().getTime()
+      });
+      props.setProperty(CONFIG.QUEUE.FAILED_EMAIL, JSON.stringify(failedQueue));
+    } catch (e) {
+      console.error("Failed caching queue email: " + e.toString());
+    }
+  },
+
+  processFailedEmailQueue: function() {
+    try {
+      var props = PropertiesService.getScriptProperties();
+      var queueJson = props.getProperty(CONFIG.QUEUE.FAILED_EMAIL);
+      if (!queueJson) return;
+
+      var queue = JSON.parse(queueJson);
+      if (queue.length === 0) return;
+
+      var remainingQueue = [];
+      for (var i = 0; i < queue.length; i++) {
+        var mail = queue[i];
+        var success = false;
+        try {
+          if (CONFIG.EMAIL_CONFIG.PROVIDER === "GmailApp") {
+            GmailApp.sendEmail(mail.recipient, mail.subject, "", {
+              htmlBody: mail.htmlBody,
+              name: CONFIG.EMAIL_CONFIG.SENDER_NAME
+            });
+          } else {
+            MailApp.sendEmail({
+              to: mail.recipient,
+              subject: mail.subject,
+              htmlBody: mail.htmlBody,
+              name: CONFIG.EMAIL_CONFIG.SENDER_NAME
+            });
+          }
+          success = true;
+        } catch (err) {
+          console.warn("Reprocess email fail to " + mail.recipient + ": " + err.toString());
+        }
+
+        if (!success) {
+          var ageMs = new Date().getTime() - mail.timestamp;
+          if (ageMs < 86400000) remainingQueue.push(mail);
+        }
+      }
+      props.setProperty(CONFIG.QUEUE.FAILED_EMAIL, JSON.stringify(remainingQueue));
+    } catch (e) {
+      console.error("Queue retry execution exception: " + e.toString());
+    }
+  }
+};
+
+// ============================================================================
+// PART 12: WEBHOOKSERVICE.GS (Sync-Back Outbound Queue Integrator)
+// ============================================================================
+
+var WebhookService = {
+  /**
+   * Safely dispatches synchronous updates to the MERN e-commerce backend.
+   */
+  syncStatusToBackend: function(payload) {
+    var backendUrl = SettingsService.get("BACKEND_URL", "");
     if (!backendUrl) return;
+
     if (backendUrl.substring(backendUrl.length - 1) === "/") {
       backendUrl = backendUrl.substring(0, backendUrl.length - 1);
     }
     var url = backendUrl + "/api/orders/sync-status";
-    var apiKey = getSetting("API_KEY", "ROY_MEN_SECURE_API_KEY_2026");
+    var apiKey = SettingsService.get("API_KEY", "ROY_MEN_SECURE_API_KEY_2026");
 
     var options = {
       method: "post",
       contentType: "application/json",
-      headers: {
-        "x-api-key": apiKey
-      },
+      headers: { "x-api-key": apiKey },
       payload: JSON.stringify(payload),
       muteHttpExceptions: true
     };
 
-    try {
-      var response = UrlFetchApp.fetch(url, options);
-      if (response.getResponseCode() === 200) {
-        console.log("Successfully re-synced queued order " + payload.orderId);
-        logAuditEvent("Sync Recovered", payload.orderId, "Offline queue item synchronized successfully.");
-      } else {
-        remainingQueue.push(payload);
-      }
-    } catch (e) {
-      console.warn("Re-sync attempt failed for order " + payload.orderId + ": " + e);
-      remainingQueue.push(payload);
-    }
-  }
-
-  props.setProperty("FAILED_SYNC_QUEUE", JSON.stringify(remainingQueue));
-}
-
-/**
- * CUSTOM EXPORT & AUDIT MENU SETUP
- * Automatically initializes on spreadsheet open.
- */
-function onOpen() {
-  var ui = SpreadsheetApp.getUi();
-  ui.createMenu("🏆 ROY MEN Dashboard")
-    .addItem("📊 Refresh Dashboard Data (Fast)", "refreshDashboard")
-    .addItem("🔄 Rebuild Dashboard & Structure", "initializeAllSheets")
-    .addItem("🕒 Setup 5-Min Auto-Trigger", "createTimeDrivenTriggers")
-    .addSeparator()
-    .addItem("📄 Export PDF Report", "exportPdfReport")
-    .addItem("📝 Export CSV Orders", "exportCsvOrders")
-    .addItem("📈 Export Excel Worksheet", "exportExcelWorksheet")
-    .addSeparator()
-    .addItem("💾 Backup Orders Ledger", "backupOrdersLedger")
-    .addToUi();
-}
-
-/**
- * INTERACTIVE SELECTION EVENT TRIGGER (Dashboard Cells as Live Buttons)
- * Automatically runs search query or clears it.
- */
-function onSelectionChange(e) {
-  var range = e.range;
-  var sheet = range.getSheet();
-  if (sheet.getName() === CONFIG.SHEETS.DASHBOARD) {
-    var row = range.getRow();
-    var col = range.getColumn();
-    if (row === 7 && col === 7) { // G7: Run Search
-      runSearch();
-    } else if (row === 7 && col === 8) { // H7: Clear Search
-      clearSearch();
-    }
-  }
-}
-
-/**
- * HTTP GET STATUS, DIAGNOSTICS & MANUAL INITIALIZATION CONTROL
- * Includes API verification.
- * 
- * @return {TextOutput} Clean status response
- */
-function doGet(e) {
-  try {
-    recordApiRequest(true);
-    
-    // 1. Validate API Key
-    if (!verifyApiKey(e, null)) {
-      recordApiRequest(false);
-      return createJsonResponse({
-        status: "unauthorized",
-        code: "INVALID_API_KEY",
-        message: "Request rejected: invalid or missing x-api-key."
-      }, 401);
-    }
-
-    // Proactively verify sheet schemas are loaded
-    initializeAllSheets();
-    
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var ordersSheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
-    var lastRow = ordersSheet.getLastRow();
-    var orderCount = lastRow > 1 ? lastRow - 1 : 0;
-
-    return createJsonResponse({
-      status: "active",
-      engine: "ROY MEN Enterprise Engine",
-      version: "6.0.0-PRO-ENTERPRISE",
-      timezone: CONFIG.TIMEZONE,
-      currentTime: formatDateTimeInDhaka(new Date()),
-      sheetsRegistered: Object.keys(CONFIG.SHEETS).map(function(key) { return CONFIG.SHEETS[key]; }),
-      diagnostics: {
-        totalOrdersRecorded: orderCount,
-        spreadsheetUrl: ss.getUrl()
-      }
-    }, 200);
-  } catch (err) {
-    console.error("[ROYMEN GET Exception]:", err);
-    recordApiRequest(false);
-    return createJsonResponse({
-      status: "degraded",
-      message: "Diagnostics initialization failed: " + err.toString()
-    }, 500);
-  }
-}
-
-/**
- * HTTP POST WEBHOOK HANDLER
- * Consumes real-time transaction objects from the MERN server.
- * Supports insert, update, and delete actions.
- * 
- * @param {Object} e - HTTP payload package
- * @return {TextOutput} Execution logs mapping to MERN client requirements
- */
-function doPost(e) {
-  var lock = LockService.getScriptLock();
-  var payloadString = e && e.postData && e.postData.contents ? e.postData.contents : "";
-  var payload = null;
-
-  try {
-    // 1. Safely parse JSON from the request body
-    if (!payloadString) {
-      recordApiRequest(false);
-      return createJsonResponse({
-        status: "error",
-        code: "EMPTY_PAYLOAD",
-        message: "Post payload contents are completely empty."
-      }, 400);
-    }
-
-    try {
-      payload = JSON.parse(payloadString);
-    } catch (parseErr) {
-      recordApiRequest(false);
-      return createJsonResponse({
-        status: "error",
-        code: "INVALID_JSON",
-        message: "Malformed JSON structure: " + parseErr.toString()
-      }, 400);
-    }
-
-    // 2. Validate API Key
-    if (!verifyApiKey(e, payload)) {
-      recordApiRequest(false);
-      return createJsonResponse({
-        status: "unauthorized",
-        code: "INVALID_API_KEY",
-        message: "Request rejected: invalid or missing x-api-key."
-      }, 401);
-    }
-
-    // 3. Webhook Signature Verification
-    if (!verifySignature(e, payloadString)) {
-      recordApiRequest(false);
-      return createJsonResponse({
-        status: "unauthorized",
-        code: "INVALID_SIGNATURE",
-        message: "Request rejected: signature verification failed."
-      }, 401);
-    }
-
-    // 4. Concurrency isolation check to protect cells during high-frequency sales
-    var isLocked = lock.tryLock(CONFIG.LOCK_TIMEOUT_MS);
-    if (!isLocked) {
-      console.error("[ROYMEN Webhook] Database concurrent lock timeout.");
-      recordApiRequest(false);
-      return createJsonResponse({
-        status: "error",
-        code: "DATABASE_CONGESTION",
-        message: "Spreadsheet database is currently locked. Retry transaction."
-      }, 423);
-    }
-
-    // 5. Ensure sheets exist before any injection
-    initializeAllSheets();
-
-    var action = payload.action || "insert";
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var ordersSheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
-    var orderIdIndex = CONFIG.HEADERS.ORDERS.indexOf("Order ID") + 1; // Col 2 (B)
-
-    // ==========================================
-    // ACTION: DELETE ORDER
-    // ==========================================
-    if (action === "delete") {
-      var foundRowIndex = findRowByOrderId(ordersSheet, payload.orderId, orderIdIndex);
-      if (foundRowIndex === -1) {
-        recordApiRequest(false);
-        return createJsonResponse({
-          status: "error",
-          code: "ORDER_NOT_FOUND",
-          message: "Delete aborted. Order ID " + payload.orderId + " does not exist."
-        }, 404);
-      }
-      
-      ordersSheet.deleteRow(foundRowIndex);
-      logAuditEvent("Delete", payload.orderId, "Order row deleted successfully via API action='delete'");
-      
-      // Batch recalculate and update
-      refreshDashboard();
-      recordApiRequest(true);
-
-      return createJsonResponse({
-        status: "success",
-        code: "ORDER_DELETED",
-        orderId: payload.orderId,
-        message: "Order ID " + payload.orderId + " successfully deleted from the ledger."
-      }, 200);
-    }
-
-    // ==========================================
-    // ACTION: INSERT OR UPDATE
-    // ==========================================
-    var validation = validatePayload(payload);
-    if (!validation.isValid) {
-      recordApiRequest(false);
-      return createJsonResponse({
-        status: "error",
-        code: "VALIDATION_FAILED",
-        message: "Field constraint failure: " + validation.errors.join(", ")
-      }, 400);
-    }
-
-    var duplicateRow = findRowByOrderId(ordersSheet, payload.orderId, orderIdIndex);
-
-    if (action === "update") {
-      if (duplicateRow === -1) {
-        recordApiRequest(false);
-        return createJsonResponse({
-          status: "error",
-          code: "ORDER_NOT_FOUND",
-          message: "Update aborted. Order ID " + payload.orderId + " does not exist."
-        }, 404);
-      }
-
-      // Preserve existing manual notes if no new notes are provided in the payload
-      var existingNotes = ordersSheet.getRange(duplicateRow, 26).getValue(); // Col Z
-      if (!payload.notes || payload.notes.toString().trim() === "") {
-        payload.notes = existingNotes;
-      }
-
-      // Record state history changes
-      var existingStatus = ordersSheet.getRange(duplicateRow, 13).getValue(); // Col M
-      var existingPayment = ordersSheet.getRange(duplicateRow, 12).getValue(); // Col L
-
-      if (payload.orderStatus && payload.orderStatus !== existingStatus) {
-        logOrderStatusChange(payload.orderId, existingStatus, payload.orderStatus, "System Webhook");
-        logAuditEvent("Status Change", payload.orderId, "Status updated from '" + existingStatus + "' to '" + payload.orderStatus + "' via API");
-      }
-      if (payload.paymentStatus && payload.paymentStatus !== existingPayment) {
-        logPaymentStatusChange(payload.orderId, existingPayment, payload.paymentStatus, "System Webhook");
-        logAuditEvent("Payment Change", payload.orderId, "Payment updated from '" + existingPayment + "' to '" + payload.paymentStatus + "' via API");
-      }
-
-      var updatedValues = mapPayloadToRowArray(payload);
-      ordersSheet.getRange(duplicateRow, 1, 1, CONFIG.HEADERS.ORDERS.length).setValues([updatedValues]);
-
-      logAuditEvent("Update", payload.orderId, "Order data updated via API action='update'");
-
-      refreshDashboard();
-      recordApiRequest(true);
-
-      return createJsonResponse({
-        status: "success",
-        code: "ORDER_UPDATED",
-        orderId: payload.orderId,
-        message: "Order ID " + payload.orderId + " successfully updated inside the ledger.",
-        row: duplicateRow
-      }, 200);
-
-    } else {
-      // DEFAULT INSERT
-      if (duplicateRow !== -1) {
-        recordApiRequest(false);
-        return createJsonResponse({
-          status: "error",
-          code: "DUPLICATE_ORDER",
-          message: "Transaction Aborted. Order ID " + payload.orderId + " already registered in the ledger."
-        }, 409);
-      }
-
-      var rowValues = mapPayloadToRowArray(payload);
-      ordersSheet.appendRow(rowValues);
-      var appendedRowIndex = ordersSheet.getLastRow();
-      
-      // Sort orders dynamically so newest always float to row 2
-      sortOrdersNewestFirst(ordersSheet);
-
-      // Log status traces
-      logOrderStatusChange(payload.orderId, "", payload.orderStatus || "Pending", "System Webhook");
-      logPaymentStatusChange(payload.orderId, "", payload.paymentStatus || "Pending", "System Webhook");
-      logAuditEvent("Insert", payload.orderId, "New order registered via API");
-
-      refreshDashboard();
-      recordApiRequest(true);
-
-      return createJsonResponse({
-        status: "success",
-        code: "ORDER_CREATED",
-        orderId: payload.orderId,
-        message: "Order ID " + payload.orderId + " successfully synced to Google Sheets.",
-        row: appendedRowIndex
-      }, 201);
-    }
-
-  } catch (err) {
-    console.error("[ROYMEN POST Exception]:", err);
-    recordApiRequest(false);
-    return createJsonResponse({
-      status: "error",
-      code: "INTERNAL_FATAL",
-      message: err.message || err.toString()
-    }, 500);
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/**
- * Validates incoming checkout parameters with strict constraint and regex safety checks.
- */
-function validatePayload(p) {
-  var errors = [];
-  if (!p) {
-    errors.push("Payload is completely null or empty");
-    return { isValid: false, errors: errors };
-  }
-  
-  if (!p.orderId || p.orderId.toString().trim() === "") {
-    errors.push("orderId is missing or empty");
-  }
-  
-  if (!p.customerName || p.customerName.toString().trim() === "") {
-    errors.push("customerName is missing or empty");
-  }
-  
-  // Email check
-  if (p.email) {
-    var emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(p.email.toString().trim())) {
-      errors.push("Invalid email format: '" + p.email + "'");
-    }
-  }
-  
-  // Phone check
-  if (!p.phone || p.phone.toString().trim() === "") {
-    errors.push("phone is missing or empty");
-  } else {
-    var phoneDigits = p.phone.toString().replace(/\D/g, "");
-    if (phoneDigits.length < 5) {
-      errors.push("Invalid phone format (must contain at least 5 digits): '" + p.phone + "'");
-    }
-  }
-  
-  // Grand Total check
-  if (p.grandTotal === undefined || p.grandTotal === null) {
-    errors.push("grandTotal is missing");
-  } else {
-    var gt = Number(p.grandTotal);
-    if (isNaN(gt) || gt < 0) {
-      errors.push("grandTotal must be a non-negative numeric value");
-    }
-  }
-  
-  // Payment Method check
-  if (!p.paymentMethod || p.paymentMethod.toString().trim() === "") {
-    errors.push("paymentMethod is missing or empty");
-  }
-  
-  // Order Status validation
-  if (p.orderStatus) {
-    if (CONFIG.ORDER_STATUSES.indexOf(p.orderStatus) === -1) {
-      errors.push("Invalid orderStatus value: '" + p.orderStatus + "'. Allowed: " + CONFIG.ORDER_STATUSES.join(", "));
-    }
-  }
-
-  // Payment Status validation
-  if (p.paymentStatus) {
-    if (CONFIG.PAYMENT_STATUSES.indexOf(p.paymentStatus) === -1) {
-      errors.push("Invalid paymentStatus value: '" + p.paymentStatus + "'. Allowed: " + CONFIG.PAYMENT_STATUSES.join(", "));
-    }
-  }
-
-  return {
-    isValid: errors.length === 0,
-    errors: errors
-  };
-}
-
-/**
- * Finds if an Order ID already exists in the sheet
- * Returns the 1-based row index, or -1 if not found.
- */
-function findRowByOrderId(sheet, orderId, colNum) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow <= 1) return -1;
-  var data = sheet.getRange(2, colNum, lastRow - 1, 1).getValues();
-  for (var i = 0; i < data.length; i++) {
-    if (data[i][0].toString().trim() === orderId.toString().trim()) {
-      return i + 2;
-    }
-  }
-  return -1;
-}
-
-/**
- * Maps the MERN JSON properties to row values (28 Columns)
- */
-function mapPayloadToRowArray(p) {
-  var bstNow = new Date();
-  var orderTime = p.orderDate ? new Date(p.orderDate) : bstNow;
-
-  return [
-    bstNow,                                              // A: Timestamp
-    p.orderId.toString(),                                // B: Order ID
-    orderTime,                                           // C: Order Date
-    p.customerName.trim(),                               // D: Customer Name
-    p.phone.toString().trim(),                           // E: Phone
-    p.email ? p.email.trim().toLowerCase() : "",         // F: Email
-    p.address || "N/A",                                  // G: Address
-    p.division || "",                                    // H: Division
-    p.district || "",                                    // I: District
-    p.postalCode || "",                                  // J: Postal Code
-    p.paymentMethod || "COD",                            // K: Payment Method
-    p.paymentStatus || "Pending",                        // L: Payment Status
-    p.orderStatus || "Pending",                          // M: Order Status
-    p.products || "N/A",                                 // N: Products (Text)
-    p.sizes || "N/A",                                    // O: Sizes
-    p.colors || "N/A",                                   // P: Colors
-    p.quantity ? Number(p.quantity) : 1,                 // Q: Quantity
-    p.unitPrice || "N/A",                                // R: Unit Price
-    p.subtotal ? Number(p.subtotal) : 0,                 // S: Subtotal
-    p.deliveryCharge ? Number(p.deliveryCharge) : 0,     // T: Delivery Charge
-    p.discount ? Number(p.discount) : 0,                 // U: Discount
-    p.grandTotal ? Number(p.grandTotal) : 0,             // V: Grand Total
-    p.courierName || "",                                 // W: Courier Name
-    p.trackingNumber || "",                              // X: Tracking Number
-    p.trackingUrl || "",                                 // Y: Tracking URL
-    p.notes || "",                                       // Z: Notes
-    p.customerIP || "127.0.0.1",                         // AA: Customer IP
-    p.browser || "N/A"                                   // AB: Browser
-  ];
-}
-
-/**
- * Enterprise key-value parameters retrieval helper.
- * Reads configurations dynamically from the Settings tab.
- */
-function getSetting(key, defaultValue) {
-  try {
-    var cached = CacheHelper.get("setting_" + key);
-    if (cached !== null) return cached;
-
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName(CONFIG.SHEETS.SETTINGS);
-    if (!sheet) return defaultValue;
-    var lastRow = sheet.getLastRow();
-    if (lastRow <= 1) return defaultValue;
-    var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
-    for (var i = 0; i < data.length; i++) {
-      if (data[i][0].toString().trim().toLowerCase() === key.toString().trim().toLowerCase()) {
-        var val = data[i][1].toString();
-        CacheHelper.put("setting_" + key, val, 300); // 5 min cache
-        return val;
-      }
-    }
-  } catch (e) {
-    console.error("Error reading setting " + key + ": " + e);
-  }
-  return defaultValue;
-}
-
-/**
- * Initializes all sheets and configures them if not existing.
- */
-function initializeAllSheets() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  var sheetsToVerify = [
-    { name: CONFIG.SHEETS.DASHBOARD, hasHeaders: false },
-    { name: CONFIG.SHEETS.ORDERS, hasHeaders: true, headers: CONFIG.HEADERS.ORDERS },
-    { name: CONFIG.SHEETS.REPORTS, hasHeaders: false },
-    { name: CONFIG.SHEETS.PRODUCTS, hasHeaders: true, headers: CONFIG.HEADERS.PRODUCTS },
-    { name: CONFIG.SHEETS.CUSTOMERS, hasHeaders: true, headers: CONFIG.HEADERS.CUSTOMERS },
-    { name: CONFIG.SHEETS.ORDER_HISTORY, hasHeaders: true, headers: CONFIG.HEADERS.ORDER_HISTORY },
-    { name: CONFIG.SHEETS.PAYMENT_HISTORY, hasHeaders: true, headers: CONFIG.HEADERS.PAYMENT_HISTORY },
-    { name: CONFIG.SHEETS.AUDIT_LOG, hasHeaders: true, headers: CONFIG.HEADERS.AUDIT_LOG },
-    { name: CONFIG.SHEETS.SETTINGS, hasHeaders: false }
-  ];
-
-  sheetsToVerify.forEach(function(sh) {
-    var s = ss.getSheetByName(sh.name);
-    if (!s) {
-      s = ss.insertSheet(sh.name);
-      if (sh.hasHeaders && sh.headers) {
-        s.appendRow(sh.headers);
-      }
-    } else if (sh.hasHeaders && s.getLastRow() === 0 && sh.headers) {
-      s.appendRow(sh.headers);
-    }
-  });
-
-  // Settings initial values seeding
-  var settingsSheet = ss.getSheetByName(CONFIG.SHEETS.SETTINGS);
-  if (settingsSheet.getLastRow() <= 1) {
-    settingsSheet.clear();
-    var settingsData = [
-      ["Setting Key", "Value", "Description"],
-      ["Business Name", "ROY MEN", "The registered name of the business"],
-      ["Support Email", "mrinal2192@gmail.com", "Main support email address"],
-      ["Support Phone", "+8801700000000", "Main support contact number"],
-      ["Currency", "BDT", "Local store currency abbreviation"],
-      ["Timezone", "Asia/Dhaka", "Standard business operation timezone"],
-      ["Delivery Charge", "100", "Standard shipping charge inside Bangladesh"],
-      ["VAT", "5%", "Value Added Tax rate"],
-      ["Discount", "0%", "Default coupon discount rate"],
-      ["Logo URL", "https://i.imgur.com/example.png", "Company brand logo image URL"],
-      ["API_KEY", "ROY_MEN_SECURE_API_KEY_2026", "Security key used for webhook validation (x-api-key)"],
-      ["WEBHOOK_SECRET", "ROY_MEN_SECRET_2026", "Webhook HMAC signature hashing secret key"],
-      ["BACKEND_URL", "http://localhost:3000", "Your MERN Railway backend URL base (e.g., https://roymen-production.up.railway.app)"]
-    ];
-    settingsSheet.getRange(1, 1, settingsData.length, 3).setValues(settingsData);
-    beautifyBasicCatalogSheet(settingsSheet, 3);
-  }
-
-  // Setup Dashboard cells (if empty or rebuilding)
-  var dSheet = ss.getSheetByName(CONFIG.SHEETS.DASHBOARD);
-  if (dSheet.getLastRow() <= 1) {
-    buildOperationalDashboard(dSheet);
-  }
-
-  // Setup Reports
-  var rSheet = ss.getSheetByName(CONFIG.SHEETS.REPORTS);
-  if (rSheet.getLastRow() <= 1) {
-    buildReportsSheet(rSheet);
-  }
-
-  // Beautify headers for history & logging sheets
-  beautifyBasicCatalogSheet(ss.getSheetByName(CONFIG.SHEETS.ORDER_HISTORY), CONFIG.HEADERS.ORDER_HISTORY.length);
-  beautifyBasicCatalogSheet(ss.getSheetByName(CONFIG.SHEETS.PAYMENT_HISTORY), CONFIG.HEADERS.PAYMENT_HISTORY.length);
-  beautifyBasicCatalogSheet(ss.getSheetByName(CONFIG.SHEETS.AUDIT_LOG), CONFIG.HEADERS.AUDIT_LOG.length);
-}
-
-/**
- * HIGH-PERFORMANCE IN-MEMORY BATCH AGGREGATION & RECALCULATION
- * Fulfills Customer Timeline, Product Analytics, and Batch-updates without row-by-row overhead.
- */
-function recalculateCatalogAndAnalytics() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var ordersSheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
-  if (!ordersSheet) return;
-  var lastRow = ordersSheet.getLastRow();
-  if (lastRow <= 1) return;
-
-  var ordersData = ordersSheet.getRange(2, 1, lastRow - 1, CONFIG.HEADERS.ORDERS.length).getValues();
-
-  var customers = {};
-  var products = {};
-
-  for (var i = 0; i < ordersData.length; i++) {
-    var row = ordersData[i];
-    var orderDate = row[2]; // Col C
-    if (!(orderDate instanceof Date)) {
-      orderDate = new Date(orderDate);
-    }
-    var customerName = row[3] ? row[3].toString().trim() : "Anonymous Customer";
-    var phone = row[4] ? row[4].toString().trim() : "N/A";
-    var email = row[5] ? row[5].toString().trim().toLowerCase() : "";
-    var pName = row[13] ? row[13].toString().trim() : "Unknown Product";
-    var qty = row[16] ? Number(row[16]) : 1;
-    var price = row[17] ? Number(row[17]) : 0;
-    var total = row[21] ? Number(row[21]) : 0; // Grand Total
-
-    // Best Selling Month grouping string
-    var yearMonth = "";
-    if (orderDate && !isNaN(orderDate.getTime())) {
-      var month = orderDate.getMonth() + 1;
-      yearMonth = orderDate.getFullYear() + "-" + (month < 10 ? "0" + month : month);
-    }
-
-    // A. Customers Aggregator
-    var custKey = phone !== "N/A" && phone !== "" ? phone : customerName;
-    if (!customers[custKey]) {
-      customers[custKey] = {
-        name: customerName,
-        phone: phone,
-        email: email,
-        firstOrder: orderDate,
-        lastOrder: orderDate,
-        lifetimeOrders: 0,
-        lifetimeSpending: 0
-      };
-    }
-    var c = customers[custKey];
-    c.lifetimeOrders += 1;
-    c.lifetimeSpending += total;
-    if (orderDate && (!c.firstOrder || orderDate < c.firstOrder)) c.firstOrder = orderDate;
-    if (orderDate && (!c.lastOrder || orderDate > c.lastOrder)) c.lastOrder = orderDate;
-
-    // B. Products Aggregator
-    if (!products[pName]) {
-      products[pName] = {
-        name: pName,
-        qtySold: 0,
-        revenue: 0,
-        firstSold: orderDate,
-        lastSold: orderDate,
-        prices: [],
-        monthlySales: {}
-      };
-    }
-    var p = products[pName];
-    p.qtySold += qty;
-    p.revenue += total;
-    if (orderDate && (!p.firstSold || orderDate < p.firstSold)) p.firstSold = orderDate;
-    if (orderDate && (!p.lastSold || orderDate > p.lastSold)) p.lastSold = orderDate;
-    if (!isNaN(price) && price > 0) p.prices.push(price);
-    if (yearMonth) {
-      p.monthlySales[yearMonth] = (p.monthlySales[yearMonth] || 0) + qty;
-    }
-  }
-
-  // Bulk Write Products
-  var prodSheet = ss.getSheetByName(CONFIG.SHEETS.PRODUCTS);
-  prodSheet.clearContents();
-  var prodHeaders = CONFIG.HEADERS.PRODUCTS;
-  prodSheet.getRange(1, 1, 1, prodHeaders.length).setValues([prodHeaders]);
-
-  var prodRows = [];
-  for (var pKey in products) {
-    var pr = products[pKey];
-    var avgPrice = pr.prices.length > 0 ? pr.prices.reduce(function(a,b){return a+b;}, 0) / pr.prices.length : 0;
-    
-    var bestMonth = "N/A";
-    var maxQty = -1;
-    for (var m in pr.monthlySales) {
-      if (pr.monthlySales[m] > maxQty) {
-        maxQty = pr.monthlySales[m];
-        bestMonth = m;
-      }
-    }
-
-    prodRows.push([
-      pr.name,
-      pr.qtySold,
-      pr.revenue,
-      pr.firstSold || "",
-      pr.lastSold || "",
-      avgPrice,
-      bestMonth
-    ]);
-  }
-  if (prodRows.length > 0) {
-    prodSheet.getRange(2, 1, prodRows.length, prodHeaders.length).setValues(prodRows);
-  }
-  beautifyBasicCatalogSheet(prodSheet, prodHeaders.length);
-
-  // Bulk Write Customers
-  var custSheet = ss.getSheetByName(CONFIG.SHEETS.CUSTOMERS);
-  custSheet.clearContents();
-  var custHeaders = CONFIG.HEADERS.CUSTOMERS;
-  custSheet.getRange(1, 1, 1, custHeaders.length).setValues([custHeaders]);
-
-  var custRows = [];
-  for (var cKey in customers) {
-    var cu = customers[cKey];
-    var avgOrderValue = cu.lifetimeOrders > 0 ? cu.lifetimeSpending / cu.lifetimeOrders : 0;
-    custRows.push([
-      cu.name,
-      cu.phone,
-      cu.email,
-      cu.firstOrder || "",
-      cu.lastOrder || "",
-      cu.lifetimeOrders,
-      cu.lifetimeSpending,
-      avgOrderValue
-    ]);
-  }
-  if (custRows.length > 0) {
-    custSheet.getRange(2, 1, custRows.length, custHeaders.length).setValues(custRows);
-  }
-  beautifyBasicCatalogSheet(custSheet, custHeaders.length);
-}
-
-/**
- * Sorts orders newest first, retaining header
- */
-function sortOrdersNewestFirst(sheet) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow > 2) {
-    var sortRange = sheet.getRange(2, 1, lastRow - 1, CONFIG.HEADERS.ORDERS.length);
-    sortRange.sort([{column: 3, ascending: false}, {column: 1, ascending: false}]);
-  }
-}
-
-/**
- * Format catalog pages (Products and Customers)
- */
-function beautifyBasicCatalogSheet(sheet, totalCols) {
-  var lastRow = sheet.getLastRow();
-  if (lastRow === 0) return;
-
-  sheet.getRange(1, 1, 1, totalCols)
-       .setBackground("#1a1a1a")
-       .setFontColor("#ffffff")
-       .setFontWeight("bold")
-       .setFontFamily("Inter, Arial, sans-serif")
-       .setFontSize(10)
-       .setHorizontalAlignment("center")
-       .setVerticalAlignment("middle");
-  sheet.setRowHeight(1, 28);
-
-  if (lastRow > 1) {
-    var body = sheet.getRange(2, 1, lastRow - 1, totalCols);
-    body.setFontFamily("Inter, sans-serif")
-        .setFontSize(9)
-        .setVerticalAlignment("middle");
-
-    for (var r = 2; r <= lastRow; r++) {
-      sheet.setRowHeight(r, 22);
-      var rowRange = sheet.getRange(r, 1, 1, totalCols);
-      rowRange.setBackground(r % 2 === 0 ? "#ffffff" : "#fcfcfc");
-    }
-  }
-  sheet.autoResizeColumns(1, totalCols);
-}
-
-/**
- * Custom-styled styling engine for the primary Transaction log
- */
-function beautifyOrdersSheet(sheet) {
-  var lastRow = sheet.getLastRow();
-  var totalCols = CONFIG.HEADERS.ORDERS.length;
-  
-  // 1. Theme the core header
-  var headerRange = sheet.getRange(1, 1, 1, totalCols);
-  headerRange.setBackground("#0c0c0c")
-             .setFontColor("#e5c158") // Royal Gold trim
-             .setFontWeight("bold")
-             .setFontFamily("Inter, sans-serif")
-             .setFontSize(10)
-             .setHorizontalAlignment("center")
-             .setVerticalAlignment("middle");
-  sheet.setRowHeight(1, 32);
-  sheet.setFrozenRows(1);
-
-  // 2. Format Body row sizing and fonts
-  if (lastRow > 1) {
-    var bodyRange = sheet.getRange(2, 1, lastRow - 1, totalCols);
-    bodyRange.setFontFamily("Inter, sans-serif")
-             .setFontSize(9)
-             .setVerticalAlignment("middle");
-              
-    // Alternating Zebra rows
-    for (var r = 2; r <= lastRow; r++) {
-      sheet.setRowHeight(r, 24);
-      var rowRange = sheet.getRange(r, 1, 1, totalCols);
-      rowRange.setBackground(r % 2 === 0 ? "#ffffff" : "#fafafa");
-    }
-
-    // Pricing aligns right
-    sheet.getRange(2, 19, lastRow - 1, 4).setHorizontalAlignment("right").setNumberFormat("৳#,##0");
-    sheet.getRange(2, 17, lastRow - 1, 1).setHorizontalAlignment("center"); // Qty
-    
-    // Dates formatted correctly
-    sheet.getRange(2, 1, lastRow - 1, 1).setNumberFormat("yyyy-mm-dd hh:mm:ss").setHorizontalAlignment("center");
-    sheet.getRange(2, 3, lastRow - 1, 1).setNumberFormat("yyyy-mm-dd hh:mm:ss").setHorizontalAlignment("center");
-
-    // 3. Dropdown Validation
-    var payStatusRange = sheet.getRange(2, 12, lastRow - 1, 1);
-    var payRule = SpreadsheetApp.newDataValidation().requireValueInList(CONFIG.PAYMENT_STATUSES).build();
-    payStatusRange.setDataValidation(payRule);
-
-    var orderStatusRange = sheet.getRange(2, 13, lastRow - 1, 1);
-    var orderRule = SpreadsheetApp.newDataValidation().requireValueInList(CONFIG.ORDER_STATUSES).build();
-    orderStatusRange.setDataValidation(orderRule);
-
-    // 4. Set up Conditional Formatting rules for order status states
-    applyOrderStatusConditionalFormatting(sheet, lastRow);
-  }
-
-  // 5. Enable default filters
-  var filter = sheet.getFilter();
-  if (!filter) {
-    sheet.getRange(1, 1, lastRow, totalCols).createFilter();
-  }
-
-  // Adjust columns widths
-  sheet.autoResizeColumns(1, totalCols);
-}
-
-/**
- * Configure beautiful conditional cell rendering rules
- */
-function applyOrderStatusConditionalFormatting(sheet, lastRow) {
-  var range = sheet.getRange(2, 13, lastRow - 1, 1); // Order Status Col M (13)
-  sheet.clearConditionalFormatRules(); // Clear previous overlaps safely
-  
-  var rules = [];
-  var statusColors = {
-    "Pending": { bg: "#fef3c7", text: "#b45309" },      // Light Yellow
-    "Confirmed": { bg: "#dbeafe", text: "#1d4ed8" },    // Light Blue
-    "Processing": { bg: "#ffedd5", text: "#c2410c" },   // Light Orange
-    "Packed": { bg: "#f3e8ff", text: "#6b21a8" },       // Light Purple
-    "Shipped": { bg: "#e0e7ff", text: "#4338ca" },       // Light Indigo
-    "Delivered": { bg: "#dcfce7", text: "#15803d" },     // Light Green
-    "Cancelled": { bg: "#fee2e2", text: "#b91c1c" },     // Light Red
-    "Returned": { bg: "#f3f4f6", text: "#374151" }       // Light Gray
-  };
-
-  Object.keys(statusColors).forEach(function(status) {
-    var style = statusColors[status];
-    var rule = SpreadsheetApp.newConditionalFormatRule()
-      .whenTextEqualTo(status)
-      .setBackground(style.bg)
-      .setFontColor(style.text)
-      .setRanges([range])
-      .build();
-    rules.push(rule);
-  });
-
-  sheet.setConditionalFormatRules(rules);
-}
-
-/**
- * Build dynamic Operations Dashboard with structural, premium cards and selection-driven search console.
- */
-function buildOperationalDashboard(sheet) {
-  sheet.clear();
-  sheet.showSheet();
-  
-  // Set dimensions
-  sheet.setColumnWidth(1, 160); // Col A: KPI Title
-  sheet.setColumnWidth(2, 120); // Col B: Value
-  sheet.setColumnWidth(3, 30);  // Col C: Spacer
-  sheet.setColumnWidth(4, 160); // Col D: KPI Title
-  sheet.setColumnWidth(5, 120); // Col E: Value
-  sheet.setColumnWidth(6, 30);  // Col F: Spacer
-  sheet.setColumnWidth(7, 240); // Col G: Search Title / Input Label / Button 1
-  sheet.setColumnWidth(8, 240); // Col H: Search Input / Button 2
-  
-  // 1. Dashboard Banner Card
-  sheet.getRange("A1:H1").merge();
-  sheet.getRange("A1").setValue("ROY MEN | EXECUTIVE CONTROL DESK")
-       .setBackground("#0f0f0f")
-       .setFontColor("#d4af37") // Gold luxury
-       .setFontFamily("Georgia, serif")
-       .setFontSize(16)
-       .setFontWeight("bold")
-       .setHorizontalAlignment("center")
-       .setVerticalAlignment("middle");
-  sheet.setRowHeight(1, 55);
-
-  sheet.getRange("A2:H2").merge();
-  sheet.getRange("A2").setValue("Real-Time Synchronization with MongoDB & MERN Checkout API")
-       .setBackground("#18181b")
-       .setFontColor("#a1a1aa")
-       .setFontFamily("Inter, Arial")
-       .setFontSize(9)
-       .setFontStyle("italic")
-       .setHorizontalAlignment("center")
-       .setVerticalAlignment("middle");
-  sheet.setRowHeight(2, 22);
-
-  // Styling palette
-  var PremiumTheme = { bgHeader: "#18181b", textHeader: "#e5c158", bgVal: "#fafafa", textVal: "#18181b" };
-  var HighlightTheme = { bgHeader: "#0c0c0c", textHeader: "#facc15", bgVal: "#fef08a", textVal: "#18181b" };
-  var SuccessTheme = { bgHeader: "#14532d", textHeader: "#4ade80", bgVal: "#f0fdf4", textVal: "#14532d" };
-  var AlertTheme = { bgHeader: "#7f1d1d", textHeader: "#fca5a5", bgVal: "#fef2f2", textVal: "#7f1d1d" };
-  var NeutralTheme = { bgHeader: "#27272a", textHeader: "#e4e4e7", bgVal: "#f4f4f5", textVal: "#27272a" };
-
-  // KPI Card Generator
-  function createKpiCard(row, col, label, formula, numFormat, colorTheme) {
-    var labelRange = sheet.getRange(row, col, 1, 2).merge();
-    labelRange.setValue("  " + label)
-              .setBackground(colorTheme.bgHeader)
-              .setFontColor(colorTheme.textHeader)
-              .setFontFamily("Inter")
-              .setFontSize(8)
-              .setFontWeight("bold")
-              .setHorizontalAlignment("left")
-              .setVerticalAlignment("middle");
-              
-    var valRange = sheet.getRange(row + 1, col, 1, 2).merge();
-    valRange.setFormula(formula)
-            .setBackground(colorTheme.bgVal)
-            .setFontColor(colorTheme.textVal)
-            .setFontFamily("Georgia")
-            .setFontSize(14)
-            .setFontWeight("bold")
-            .setHorizontalAlignment("center")
-            .setVerticalAlignment("middle");
-    if (numFormat) valRange.setNumberFormat(numFormat);
-    
-    sheet.getRange(row, col, 2, 2).setBorder(true, true, true, true, false, false, "#e4e4e7", SpreadsheetApp.BorderStyle.SOLID);
-  }
-
-  // --- BUILD METRIC CARD GRID ---
-  createKpiCard(4, 1, "TOTAL REVENUE", "=SUM(Orders!V2:V)", "৳#,##0", PremiumTheme);
-  createKpiCard(4, 4, "PENDING ORDERS COUNT", "=COUNTIF(Orders!M2:M, \"Pending\")", "#,##0", HighlightTheme);
-
-  createKpiCard(7, 1, "TODAY'S REVENUE", "=SUMIFS(Orders!V2:V, Orders!C2:C, \">=\"&TODAY(), Orders!C2:C, \"<\"&TODAY()+1)", "৳#,##0", HighlightTheme);
-  createKpiCard(7, 4, "DELIVERED ORDERS", "=COUNTIF(Orders!M2:M, \"Delivered\")", "#,##0", SuccessTheme);
-
-  createKpiCard(10, 1, "THIS MONTH REVENUE", "=SUMIFS(Orders!V2:V, Orders!C2:C, \">=\"&DATE(YEAR(TODAY()), MONTH(TODAY()), 1), Orders!C2:C, \"<\"&DATE(YEAR(TODAY()), MONTH(TODAY())+1, 1))", "৳#,##0", NeutralTheme);
-  createKpiCard(10, 4, "CANCELLED ORDERS", "=COUNTIF(Orders!M2:M, \"Cancelled\")", "#,##0", AlertTheme);
-
-  createKpiCard(13, 1, "AVERAGE ORDER VALUE (AOV)", "=IFERROR(AVERAGE(Orders!V2:V), 0)", "৳#,##0", NeutralTheme);
-  createKpiCard(13, 4, "TOTAL UNIQUE CLIENTS", "=COUNTA(Customers!A2:A)", "#,##0", NeutralTheme);
-
-  createKpiCard(16, 1, "TOP PERFORMING ITEM", "=IFERROR(INDEX(Products!A2:A, MATCH(MAX(Products!B2:B), Products!B2:B, 0)), \"None\")", null, PremiumTheme);
-  createKpiCard(16, 4, "NEWEST REGISTERED USER", "=IFERROR(INDEX(Customers!A2:A, MATCH(MAX(Customers!F2:F), Customers!F2:F, 0)), \"None\")", null, NeutralTheme);
-
-  // Set card sizing proportions
-  var rowsToSize = [4, 7, 10, 13, 16];
-  rowsToSize.forEach(function(r) {
-    sheet.setRowHeight(r, 18);
-    sheet.setRowHeight(r + 1, 32);
-    sheet.setRowHeight(r + 2, 12); // Margin gaps
-  });
-
-  // --- INTERACTIVE SEARCH CONSOLE DESK (Col G-H) ---
-  sheet.getRange("G4:H4").merge();
-  sheet.getRange("G4").setValue("✦ TRANSACTION SEARCH ENGINE")
-       .setBackground("#0c0c0c")
-       .setFontColor("#facc15")
-       .setFontWeight("bold")
-       .setFontFamily("Inter, sans-serif")
-       .setFontSize(10)
-       .setHorizontalAlignment("center")
-       .setVerticalAlignment("middle");
-  sheet.setRowHeight(4, 26);
-
-  sheet.getRange("G5:H5").merge();
-  sheet.getRange("G5").setValue("ENTER QUERY BELOW & TAP THE INTERACTIVE RUN BUTTON:")
-       .setFontSize(8)
-       .setFontWeight("bold")
-       .setFontFamily("Inter")
-       .setFontColor("#71717a")
-       .setHorizontalAlignment("center")
-       .setVerticalAlignment("middle");
-  sheet.setRowHeight(5, 20);
-
-  // Search input cell (G6:H6 merged)
-  sheet.getRange("G6:H6").merge();
-  var searchInput = sheet.getRange("G6");
-  if (searchInput.getValue() === "") {
-    searchInput.setValue("");
-  }
-  searchInput.setBackground("#fefce8")
-              .setBorder(true, true, true, true, false, false, "#eab308", SpreadsheetApp.BorderStyle.DOUBLE)
-              .setFontWeight("bold")
-              .setFontFamily("Inter")
-              .setFontSize(11)
-              .setHorizontalAlignment("center")
-              .setVerticalAlignment("middle");
-  sheet.setRowHeight(6, 32);
-
-  // Interactive buttons via onSelectionChange cells
-  sheet.getRange("G7").setValue("🔍 [ CLICK TO RUN SEARCH ]")
-       .setBackground("#dcfce7")
-       .setFontColor("#15803d")
-       .setFontWeight("bold")
-       .setFontFamily("Inter")
-       .setFontSize(9)
-       .setHorizontalAlignment("center")
-       .setVerticalAlignment("middle")
-       .setBorder(true, true, true, true, false, false, "#16a34a", SpreadsheetApp.BorderStyle.SOLID);
-       
-  sheet.getRange("H7").setValue("🧹 [ CLICK TO CLEAR ]")
-       .setBackground("#f4f4f5")
-       .setFontColor("#4b5563")
-       .setFontWeight("bold")
-       .setFontFamily("Inter")
-       .setFontSize(9)
-       .setHorizontalAlignment("center")
-       .setVerticalAlignment("middle")
-       .setBorder(true, true, true, true, false, false, "#9ca3af", SpreadsheetApp.BorderStyle.SOLID);
-  sheet.setRowHeight(7, 26);
-
-  sheet.getRange("G9:H9").merge();
-  sheet.getRange("G9").setValue("REAL-TIME RECONCILED SEARCH LEDGER MATCHES:")
-       .setFontSize(8)
-       .setFontWeight("bold")
-       .setFontFamily("Inter")
-       .setFontColor("#ffffff")
-       .setBackground("#27272a")
-       .setHorizontalAlignment("center")
-       .setVerticalAlignment("middle");
-  sheet.setRowHeight(9, 20);
-
-  // Dynamic filter query statement
-  var queryFormula = '=IF(ISBLANK(G6), "💡 ENTER TARGET SEARCH QUERY TO START RECONCILIATION...", IFERROR(QUERY(Orders!A2:AB, "SELECT B, D, E, K, L, M, V WHERE B LIKE \'%"&G6&"%\' OR D LIKE \'%"&G6&"%\' OR E LIKE \'%"&G6&"%\' OR F LIKE \'%"&G6&"%\' LIMIT 15 LABEL B \'Order ID\', D \'Client Name\', E \'Phone\', K \'Gateway\', L \'Payment\', M \'Status\', V \'Total (BDT)\'", 1), "❌ NO MATCHING SYSTEM TRANSACTION RECORDS RECOGNIZED."))';
-  sheet.getRange("G10").setFormula(queryFormula)
-       .setFontFamily("Inter")
-       .setFontSize(9)
-       .setVerticalAlignment("middle");
+    var maxRetries = CONFIG.API_CONFIG.RETRY_COUNT;
+    var delayMs = CONFIG.API_CONFIG.RETRY_DELAY_MS;
+    var attempt = 0;
+    var success = false;
+    var responseCode = 0;
+    var errorMsg = "";
+
+    while (attempt < maxRetries && !success) {
+      attempt++;
+      try {
+        var response = UrlFetchApp.fetch(url, options);
+        responseCode = response.getResponseCode();
         
-  sheet.getRange("G10:H20").setFontFamily("Inter").setFontSize(9);
-
-  // --- SECTION G: SYSTEM HEALTH MONITOR (G21:H26) ---
-  sheet.getRange("G21:H21").merge();
-  sheet.getRange("G21").setValue("⚙️ SYSTEM HEALTH MONITOR")
-       .setBackground("#0c0c0c")
-       .setFontColor("#facc15")
-       .setFontWeight("bold")
-       .setFontFamily("Inter, sans-serif")
-       .setFontSize(10)
-       .setHorizontalAlignment("center")
-       .setVerticalAlignment("middle");
-  sheet.setRowHeight(21, 26);
-
-  var healthLabels = [
-    ["Apps Script Status", "Healthy"],
-    ["Database Status", "Online"],
-    ["Last Sync Time", "Never"],
-    ["Total API Requests", "0"],
-    ["Success Rate", "100%"]
-  ];
-
-  for (var idx = 0; idx < healthLabels.length; idx++) {
-    var rNum = 22 + idx;
-    sheet.getRange(rNum, 7).setValue(healthLabels[idx][0])
-         .setBackground("#18181b")
-         .setFontColor("#e4e4e7")
-         .setFontWeight("bold")
-         .setFontFamily("Inter")
-         .setFontSize(9)
-         .setHorizontalAlignment("left")
-         .setVerticalAlignment("middle");
-
-    sheet.getRange(rNum, 8).setValue(healthLabels[idx][1])
-         .setBackground("#f4f4f5")
-         .setFontColor("#18181b")
-         .setFontFamily("Inter")
-         .setFontSize(9)
-         .setHorizontalAlignment("center")
-         .setVerticalAlignment("middle");
-    sheet.setRowHeight(rNum, 22);
-    sheet.getRange(rNum, 7, 1, 2).setBorder(true, true, true, true, false, false, "#e4e4e7", SpreadsheetApp.BorderStyle.SOLID);
-  }
-}
-
-/**
- * FAST REFRESH FOR DASHBOARD FORMULAS & SYSTEM HEALTH STATUS
- * Satisfies performance requirements without clearing design elements or cell layout.
- */
-function refreshDashboard() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(CONFIG.SHEETS.DASHBOARD);
-  if (!sheet) return;
-
-  // Reprocess any offline failed sync packets first
-  try {
-    processFailedSyncQueue();
-  } catch (err) {
-    console.error("Failed processing sync queue: " + err);
-  }
-
-  // Recalculate analytic catalog lists in batch
-  recalculateCatalogAndAnalytics();
-
-  // Refresh dynamic aggregations & charts in Reports sheet
-  var rSheet = ss.getSheetByName(CONFIG.SHEETS.REPORTS);
-  if (rSheet) {
-    buildReportsSheet(rSheet);
-  }
-
-  // Refresh System Health monitor values dynamically
-  var props = PropertiesService.getScriptProperties();
-  var total = Number(props.getProperty("TOTAL_REQUESTS") || "0");
-  var failed = Number(props.getProperty("FAILED_REQUESTS") || "0");
-  var successRate = total > 0 ? Math.round(((total - failed) / total) * 100) + "%" : "100%";
-  var lastSyncEpoch = Number(props.getProperty("LAST_SYNC_TIME") || "0");
-  var lastSyncStr = lastSyncEpoch > 0 ? formatDateTimeInDhaka(new Date(lastSyncEpoch)) : "Never";
-
-  sheet.getRange("H22").setValue("Healthy");
-  sheet.getRange("H23").setValue("Online");
-  sheet.getRange("H24").setValue(lastSyncStr);
-  sheet.getRange("H25").setValue(total + " (Failed: " + failed + ")");
-  sheet.getRange("H26").setValue(successRate);
-
-  SpreadsheetApp.flush();
-}
-
-/**
- * AUTOMATED CLOCK RE-TRIGGER TARGET
- */
-function runEvery5Minutes() {
-  console.log("Triggered automatic 5-min cron dashboard sync...");
-  try {
-    processFailedSyncQueue();
-  } catch (err) {
-    console.error("Failed processing sync queue in cron: " + err);
-  }
-  refreshDashboard();
-}
-
-/**
- * Create a clock trigger to sync business data and report models automatically.
- */
-function createTimeDrivenTriggers() {
-  var triggers = ScriptApp.getProjectTriggers();
-  var triggerExists = false;
-  
-  for (var i = 0; i < triggers.length; i++) {
-    if (triggers[i].getHandlerFunction() === "runEvery5Minutes") {
-      triggerExists = true;
-      break;
+        if (responseCode === 200 || responseCode === 201) {
+          success = true;
+          AuditService.log("Sync Success", payload.orderId, "Synchronized order status back to Railway.");
+        } else {
+          errorMsg = "HTTP " + responseCode + ": " + response.getContentText();
+          if (attempt < maxRetries) Utilities.sleep(delayMs * attempt);
+        }
+      } catch (e) {
+        errorMsg = e.toString();
+        if (attempt < maxRetries) Utilities.sleep(delayMs * attempt);
+      }
     }
-  }
-  
-  if (!triggerExists) {
-    ScriptApp.newTrigger("runEvery5Minutes")
-             .timeBased()
-             .everyMinutes(5)
-             .create();
-    SpreadsheetApp.getUi().alert("🕒 Automated clock trigger successfully scheduled to run every 5 minutes!");
-  } else {
-    SpreadsheetApp.getUi().alert("🕒 Clock sync trigger is already active and running.");
-  }
-}
 
-/**
- * Build dynamic Reports sheet equipped with auto-aggregating visual metrics and charts.
- */
-function buildReportsSheet(sheet) {
-  sheet.clear();
-  sheet.showSheet();
+    if (!success) this.queueFailedSync(payload, errorMsg);
+  },
 
-  sheet.setColumnWidth(1, 100); // Daily Date
-  sheet.setColumnWidth(2, 80);  // Daily orders
-  sheet.setColumnWidth(3, 120); // Daily revenue
-  sheet.setColumnWidth(4, 30);  // Spacer
-  sheet.setColumnWidth(5, 100); // Monthly date
-  sheet.setColumnWidth(6, 80);  // Monthly orders
-  sheet.setColumnWidth(7, 120); // Monthly revenue
-  sheet.setColumnWidth(8, 30);  // Spacer
-  sheet.setColumnWidth(9, 100); // Gateway label
-  sheet.setColumnWidth(10, 120); // Gateway volume
-  sheet.setColumnWidth(11, 30); // Spacer
-  sheet.setColumnWidth(12, 100); // Status label
-  sheet.setColumnWidth(13, 80);  // Status count
-  sheet.setColumnWidth(14, 30); // Spacer
-  sheet.setColumnWidth(15, 150); // Product catalog name
-  sheet.setColumnWidth(16, 80);  // Product sales
-  sheet.setColumnWidth(17, 120); // Product revenue
-  sheet.setColumnWidth(18, 30); // Spacer
-  sheet.setColumnWidth(19, 150); // Customer name
-  sheet.setColumnWidth(20, 80);  // Customer orders
-  sheet.setColumnWidth(21, 120); // Customer spending
-
-  sheet.getRange("A1:U1").merge();
-  sheet.getRange("A1").setValue("ROY MEN | EXECUTIVE REPORTING & AUDITING")
-       .setBackground("#000000")
-       .setFontColor("#ffffff")
-       .setFontFamily("Georgia")
-       .setFontSize(14)
-       .setFontWeight("bold")
-       .setHorizontalAlignment("center")
-       .setVerticalAlignment("middle");
-  sheet.setRowHeight(1, 45);
-
-  function applyHeader(range, text) {
-    range.merge().setValue(text)
-         .setBackground("#ecebeb")
-         .setFontColor("#000000")
-         .setFontWeight("bold")
-         .setFontSize(9)
-         .setFontFamily("Inter")
-         .setHorizontalAlignment("center");
-  }
-
-  // Row 3 Section Headers
-  applyHeader(sheet.getRange("A3:C3"), "DAILY SALES TIMELINE");
-  applyHeader(sheet.getRange("E3:G3"), "MONTHLY SALES TRENDS");
-  applyHeader(sheet.getRange("I3:J3"), "PAYMENT METHOD SPLIT");
-  applyHeader(sheet.getRange("L3:M3"), "ORDER STATUS SPREAD");
-  applyHeader(sheet.getRange("O3:Q3"), "TOP SELLING PRODUCTS");
-  applyHeader(sheet.getRange("S3:U3"), "TOP VALUE CUSTOMERS");
-
-  // Dynamic Query formulas for instant aggregation reporting
-  sheet.getRange("A4").setFormula('=QUERY(Orders!A2:AB, "SELECT toDate(C), COUNT(B), SUM(V) WHERE B IS NOT NULL GROUP BY toDate(C) ORDER BY toDate(C) DESC LIMIT 15 LABEL toDate(C) \'Date\', COUNT(B) \'Orders\', SUM(V) \'Revenue (BDT)\'", 1)');
-  sheet.getRange("E4").setFormula('=QUERY(Orders!A2:AB, "SELECT eomonth(C), COUNT(B), SUM(V) WHERE B IS NOT NULL GROUP BY eomonth(C) ORDER BY eomonth(C) DESC LIMIT 12 LABEL eomonth(C) \'Month\', COUNT(B) \'Orders\', SUM(V) \'Revenue (BDT)\'", 1)');
-  sheet.getRange("I4").setFormula('=QUERY(Orders!A2:AB, "SELECT K, SUM(V) WHERE B IS NOT NULL GROUP BY K LABEL K \'Gateway\', SUM(V) \'Volume\'", 1)');
-  sheet.getRange("L4").setFormula('=QUERY(Orders!A2:AB, "SELECT M, COUNT(B) WHERE B IS NOT NULL GROUP BY M LABEL M \'Status\', COUNT(B) \'Orders\'", 1)');
-  sheet.getRange("O4").setFormula('=QUERY(Products!A2:G, "SELECT A, B, C WHERE A IS NOT NULL ORDER BY B DESC LIMIT 10 LABEL A \'Product\', B \'Qty\', C \'Revenue\'", 1)');
-  sheet.getRange("S4").setFormula('=QUERY(Customers!A2:H, "SELECT A, F, G WHERE A IS NOT NULL ORDER BY G DESC LIMIT 10 LABEL A \'Customer\', F \'Orders\', G \'Spending\'", 1)');
-
-  sheet.getRange("A4:U4").setFontWeight("bold").setBackground("#f8f8f8");
-  sheet.getRange(4, 1, 30, 21).setFontFamily("Inter").setFontSize(9);
-
-  // Generate beautiful charts programmatically
-  generateOperationalCharts(sheet);
-}
-
-/**
- * Builds 6 premium embedded dashboard charts natively inside the Reports desk.
- */
-function generateOperationalCharts(sheet) {
-  var charts = sheet.getCharts();
-  for (var i = 0; i < charts.length; i++) {
-    sheet.removeChart(charts[i]);
-  }
-
-  // Chart 1: Daily Revenue Trend (Area Chart)
-  var dailyDateRange = sheet.getRange("A5:A20");
-  var dailyRevRange = sheet.getRange("C5:C20");
-  var dailyChart = sheet.newChart()
-    .setChartType(Charts.ChartType.AREA)
-    .addRange(dailyDateRange)
-    .addRange(dailyRevRange)
-    .setPosition(18, 1, 0, 0)
-    .setOption("title", "Daily Revenue Trend (BDT)")
-    .setOption("legend", { position: "none" })
-    .setOption("colors", ["#0f172a"])
-    .build();
-
-  // Chart 2: Monthly Revenue Trend (Column Chart)
-  var monthlyDateRange = sheet.getRange("E5:E16");
-  var monthlyRevRange = sheet.getRange("G5:G16");
-  var monthlyChart = sheet.newChart()
-    .setChartType(Charts.ChartType.COLUMN)
-    .addRange(monthlyDateRange)
-    .addRange(monthlyRevRange)
-    .setPosition(18, 8, 0, 0)
-    .setOption("title", "Monthly Revenue Trend (BDT)")
-    .setOption("legend", { position: "none" })
-    .setOption("colors", ["#d4af37"])
-    .build();
-
-  // Chart 3: Payment Method Chart (Pie Chart)
-  var gatewayRange = sheet.getRange("I4:J10");
-  var paymentChart = sheet.newChart()
-    .setChartType(Charts.ChartType.PIE)
-    .addRange(gatewayRange)
-    .setPosition(34, 1, 0, 0)
-    .setOption("title", "Payment Method Split")
-    .setOption("is3D", true)
-    .setOption("colors", ["#18181b", "#d4af37", "#52525b", "#a1a1aa"])
-    .build();
-
-  // Chart 4: Order Status Chart (Donut Chart)
-  var statusRange = sheet.getRange("L4:M12");
-  var statusChart = sheet.newChart()
-    .setChartType(Charts.ChartType.PIE)
-    .addRange(statusRange)
-    .setPosition(34, 8, 0, 0)
-    .setOption("title", "Order Status Spread")
-    .setOption("pieHole", 0.4)
-    .setOption("colors", ["#f59e0b", "#3b82f6", "#f97316", "#8b5cf6", "#6366f1", "#10b981", "#ef4444", "#6b7280"])
-    .build();
-
-  // Chart 5: Top Products Chart (Bar Chart)
-  var prodNameRange = sheet.getRange("O5:O14");
-  var prodQtyRange = sheet.getRange("P5:P14");
-  var prodChart = sheet.newChart()
-    .setChartType(Charts.ChartType.BAR)
-    .addRange(prodNameRange)
-    .addRange(prodQtyRange)
-    .setPosition(50, 1, 0, 0)
-    .setOption("title", "Top Products (Qty Sold)")
-    .setOption("legend", { position: "none" })
-    .setOption("colors", ["#27272a"])
-    .build();
-
-  // Chart 6: Top Customers Chart (Bar Chart)
-  var custNameRange = sheet.getRange("S5:S14");
-  var custSpentRange = sheet.getRange("U5:U14");
-  var custChart = sheet.newChart()
-    .setChartType(Charts.ChartType.BAR)
-    .addRange(custNameRange)
-    .addRange(custSpentRange)
-    .setPosition(50, 8, 0, 0)
-    .setOption("title", "Top Customers (Total Spending)")
-    .setOption("legend", { position: "none" })
-    .setOption("colors", ["#d4af37"])
-    .build();
-
-  sheet.insertChart(dailyChart);
-  sheet.insertChart(monthlyChart);
-  sheet.insertChart(paymentChart);
-  sheet.insertChart(statusChart);
-  sheet.insertChart(prodChart);
-  sheet.insertChart(custChart);
-}
-
-/**
- * ACTION: EXPORT PDF
- */
-function exportPdfReport() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(CONFIG.SHEETS.REPORTS);
-  var url = ss.getUrl().replace(/edit$/, '') + 'export?exportFormat=pdf&format=pdf&size=letter&portrait=false&fitw=true&sheetid=' + sheet.getSheetId();
-  
-  var html = '<h3>ROY MEN Report PDF Ready</h3>' +
-             '<p>Click the link below to download your premium PDF report:</p>' +
-             '<a href="' + url + '" target="_blank" style="padding: 10px 20px; background: #000000; color: #ffffff; text-decoration: none; font-weight: bold; border-radius: 4px; display: inline-block;">Download PDF Report</a>';
-  var userInterface = HtmlService.createHtmlOutput(html).setWidth(400).setHeight(180);
-  SpreadsheetApp.getUi().showModalDialog(userInterface, "Export PDF");
-}
-
-/**
- * ACTION: EXPORT CSV
- */
-function exportCsvOrders() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
-  var url = ss.getUrl().replace(/edit$/, '') + 'export?exportFormat=csv&gid=' + sheet.getSheetId();
-  
-  var html = '<h3>ROY MEN Orders CSV Ready</h3>' +
-             '<p>Click the link below to download your raw transaction logs in CSV format:</p>' +
-             '<a href="' + url + '" target="_blank" style="padding: 10px 20px; background: #000000; color: #ffffff; text-decoration: none; font-weight: bold; border-radius: 4px; display: inline-block;">Download CSV File</a>';
-  var userInterface = HtmlService.createHtmlOutput(html).setWidth(400).setHeight(180);
-  SpreadsheetApp.getUi().showModalDialog(userInterface, "Export CSV");
-}
-
-/**
- * ACTION: EXPORT EXCEL
- */
-function exportExcelWorksheet() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var url = ss.getUrl().replace(/edit$/, '') + 'export?exportFormat=xlsx';
-  
-  var html = '<h3>ROY MEN Excel Workbook Ready</h3>' +
-             '<p>Click the link below to download the complete database in Excel format (.xlsx):</p>' +
-             '<a href="' + url + '" target="_blank" style="padding: 10px 20px; background: #000000; color: #ffffff; text-decoration: none; font-weight: bold; border-radius: 4px; display: inline-block;">Download Excel Workbook</a>';
-  var userInterface = HtmlService.createHtmlOutput(html).setWidth(400).setHeight(180);
-  SpreadsheetApp.getUi().showModalDialog(userInterface, "Export Excel");
-}
-
-/**
- * ACTION: BACKUP ORDERS
- */
-function backupOrdersLedger() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sourceSheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
-  var bstNowString = formatDateTimeInDhaka(new Date()).replace(/[:\s]/g, "_");
-  var backupSheetName = "Backup_Orders_" + bstNowString;
-  
-  var backupSheet = ss.getSheetByName(backupSheetName);
-  if (backupSheet) {
-    ss.deleteSheet(backupSheet);
-  }
-  
-  backupSheet = sourceSheet.copyTo(ss);
-  backupSheet.setName(backupSheetName);
-  backupSheet.hideSheet();
-  
-  SpreadsheetApp.getUi().alert("Backup Successful!\nCreated hidden audit backup sheet: " + backupSheetName);
-}
-
-/**
- * SEARCH EXECUTOR Triggered by selecting G7 cell
- */
-function runSearch() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEETS.DASHBOARD);
-  var query = sheet.getRange("G6").getValue();
-  if (!query) {
-    SpreadsheetApp.getUi().alert("Please enter a search query in cell G6 first.");
-    return;
-  }
-  SpreadsheetApp.getActiveSpreadsheet().toast("Search completed for query: '" + query + "'", "Search Engine Status", 3);
-}
-
-/**
- * SEARCH CLEAR Triggered by selecting H7 cell
- */
-function clearSearch() {
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.SHEETS.DASHBOARD);
-  sheet.getRange("G6").setValue("");
-}
-
-/**
- * Helper: Converts Date to string matching Dhaka Timezone
- */
-function formatDateTimeInDhaka(date) {
-  try {
-    return Utilities.formatDate(date, CONFIG.TIMEZONE, CONFIG.DATE_FORMAT);
-  } catch (e) {
-    return date.toISOString();
-  }
-}
-
-/**
- * Dynamic JSON formatter helper
- */
-function createJsonResponse(body, status) {
-  body.statusCode = status || 200;
-  return ContentService.createTextOutput(JSON.stringify(body))
-                       .setMimeType(ContentService.MimeType.JSON);
-}
-
-/**
- * HISTORICAL STATE LOGGERS
- */
-function logOrderStatusChange(orderId, prevStatus, newStatus, changedBy) {
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName(CONFIG.SHEETS.ORDER_HISTORY);
-    sheet.appendRow([new Date(), orderId, prevStatus || "None", newStatus, changedBy]);
-    beautifyBasicCatalogSheet(sheet, CONFIG.HEADERS.ORDER_HISTORY.length);
-  } catch(e) {
-    console.error("Order status logging failure: " + e);
-  }
-}
-
-function logPaymentStatusChange(orderId, prevStatus, newStatus, changedBy) {
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName(CONFIG.SHEETS.PAYMENT_HISTORY);
-    sheet.appendRow([new Date(), orderId, prevStatus || "None", newStatus, changedBy]);
-    beautifyBasicCatalogSheet(sheet, CONFIG.HEADERS.PAYMENT_HISTORY.length);
-  } catch(e) {
-    console.error("Payment status logging failure: " + e);
-  }
-}
-
-function logAuditEvent(eventType, orderId, details) {
-  try {
-    console.log("[ROY_MEN Audit] " + eventType + " for order " + orderId + ": " + details);
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var sheet = ss.getSheetByName(CONFIG.SHEETS.AUDIT_LOG);
-    sheet.appendRow([new Date(), eventType, orderId, details]);
-    beautifyBasicCatalogSheet(sheet, CONFIG.HEADERS.AUDIT_LOG.length);
-  } catch(e) {
-    console.error("Audit logging failure: " + e);
-  }
-}
-
-/**
- * API Key security validation check
- */
-function verifyApiKey(e, payload) {
-  var expectedKey = getSetting("API_KEY", "ROY_MEN_SECURE_API_KEY_2026");
-  var providedKey = e && e.parameter ? (e.parameter["x-api-key"] || e.parameter["apiKey"]) : null;
-  if (!providedKey && payload) {
-    providedKey = payload["x-api-key"] || payload.apiKey;
-  }
-  return (providedKey && providedKey === expectedKey);
-}
-
-/**
- * Webhook HMAC Hashing Signature Verification
- */
-function verifySignature(e, payloadString) {
-  var secret = getSetting("WEBHOOK_SECRET", "ROY_MEN_SECRET_2026");
-  var providedSignature = e && e.parameter ? (e.parameter["signature"] || e.parameter["x-signature"]) : null;
-  if (!providedSignature) {
-    return true; // Let unsigned fallbacks pass gracefully if not strictly configured
-  }
-
-  try {
-    var computedSignature = Utilities.computeHmacSignature(
-      Utilities.MacAlgorithm.HMAC_SHA_256,
-      payloadString,
-      secret,
-      Utilities.Charset.UTF_8
-    );
-    var computedHex = computedSignature.map(function(byte) {
-      var hex = (byte & 0xff).toString(16);
-      return hex.length === 1 ? "0" + hex : hex;
-    }).join("");
-    return computedHex === providedSignature;
-  } catch(err) {
-    console.error("Signature calculation error: " + err);
-    return false;
-  }
-}
-
-/**
- * IN-MEMORY SCRIPT PERFORMANCE CACHING UTILITIES
- */
-var CacheHelper = {
-  get: function(key) {
+  queueFailedSync: function(payload, errorMsg) {
     try {
-      return CacheService.getScriptCache().get(key);
-    } catch(e) {
-      return null;
+      var props = PropertiesService.getScriptProperties();
+      var failedQueue = JSON.parse(props.getProperty(CONFIG.QUEUE.FAILED_SYNC) || "[]");
+      if (failedQueue.length >= CONFIG.QUEUE.SIZE_LIMIT) failedQueue.shift();
+
+      var existingIndex = -1;
+      for (var i = 0; i < failedQueue.length; i++) {
+        if (failedQueue[i].orderId === payload.orderId) {
+          existingIndex = i;
+          break;
+        }
+      }
+
+      if (existingIndex !== -1) {
+        failedQueue[existingIndex] = payload;
+      } else {
+        failedQueue.push(payload);
+      }
+      props.setProperty(CONFIG.QUEUE.FAILED_SYNC, JSON.stringify(failedQueue));
+      AuditService.log("Sync Buffered", payload.orderId, "Outbound sync offline. Code: " + errorMsg);
+    } catch (e) {
+      console.error("Queue database sync fail: " + e.toString());
     }
   },
-  put: function(key, value, durationSec) {
+
+  processFailedSyncQueue: function() {
     try {
-      CacheService.getScriptCache().put(key, value, durationSec || 300);
-    } catch(e) {}
+      var props = PropertiesService.getScriptProperties();
+      var queueJson = props.getProperty(CONFIG.QUEUE.FAILED_SYNC);
+      if (!queueJson) return;
+
+      var queue = JSON.parse(queueJson);
+      if (queue.length === 0) return;
+
+      var remainingQueue = [];
+      var backendUrl = SettingsService.get("BACKEND_URL", "");
+      if (!backendUrl) return;
+
+      if (backendUrl.substring(backendUrl.length - 1) === "/") {
+        backendUrl = backendUrl.substring(0, backendUrl.length - 1);
+      }
+      var url = backendUrl + "/api/orders/sync-status";
+      var apiKey = SettingsService.get("API_KEY", "ROY_MEN_SECURE_API_KEY_2026");
+
+      for (var i = 0; i < queue.length; i++) {
+        var payload = queue[i];
+        var options = {
+          method: "post",
+          contentType: "application/json",
+          headers: { "x-api-key": apiKey },
+          payload: JSON.stringify(payload),
+          muteHttpExceptions: true
+        };
+
+        try {
+          var response = UrlFetchApp.fetch(url, options);
+          if (response.getResponseCode() === 200 || response.getResponseCode() === 201) {
+            AuditService.log("Sync Recovered", payload.orderId, "Successfully synchronized buffered order state.");
+          } else {
+            remainingQueue.push(payload);
+          }
+        } catch (e) {
+          remainingQueue.push(payload);
+        }
+      }
+      props.setProperty(CONFIG.QUEUE.FAILED_SYNC, JSON.stringify(remainingQueue));
+    } catch (e) {
+      console.error("Error processing failed sync queue: " + e.toString());
+    }
   }
 };
 
-/**
- * DIAGNOSTIC COUNTERS SYSTEM
- */
-function recordApiRequest(isSuccess) {
+// ============================================================================
+// PART 13: DASHBOARDSERVICER.GS (Live KPI Console & Search Control)
+// ============================================================================
+
+var DashboardService = {
+  /**
+   * Rebuilds the operational dashboard panel.
+   */
+  initializeDashboard: function() {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getSheetByName(CONFIG.SHEETS.DASHBOARD);
+      if (!sheet) {
+        sheet = ss.insertSheet(CONFIG.SHEETS.DASHBOARD);
+      }
+
+      sheet.clear();
+      sheet.getRange("A1:Z100").setBackground("#FFFFFF");
+      sheet.showSheet();
+      sheet.setGridlines(false);
+
+      var titleRange = sheet.getRange(CONFIG.DASHBOARD_COORDS.TITLE_RANGE);
+      titleRange.merge()
+        .setValue("ROY MEN")
+        .setFontFamily("Inter")
+        .setFontSize(22)
+        .setFontWeight("bold")
+        .setFontColor(CONFIG.THEME.PRIMARY_DARK)
+        .setHorizontalAlignment("center")
+        .setVerticalAlignment("middle");
+
+      var subtitleRange = sheet.getRange(CONFIG.DASHBOARD_COORDS.SUBTITLE_RANGE);
+      subtitleRange.merge()
+        .setValue("ENTERPRISE ORDER RECONCILIATION & OPERATIONS")
+        .setFontFamily("Inter")
+        .setFontSize(9)
+        .setFontWeight("normal")
+        .setFontColor(CONFIG.THEME.ACCENT_GOLD)
+        .setHorizontalAlignment("center")
+        .setVerticalAlignment("middle");
+
+      var divider = sheet.getRange("A3:H3");
+      divider.merge().setBackground(CONFIG.THEME.PRIMARY_DARK);
+
+      var kpis = CONFIG.DASHBOARD_COORDS.KPI_GRID;
+      this.drawKpiBlock(sheet, kpis.REVENUE.LABEL, kpis.REVENUE.VALUE, "TOTAL REVENUE", kpis.REVENUE.FORMULA, "৳#,##0");
+      this.drawKpiBlock(sheet, kpis.ORDERS.LABEL, kpis.ORDERS.VALUE, "TOTAL TRANSACTIONS", kpis.ORDERS.FORMULA, "#,##0");
+      this.drawKpiBlock(sheet, kpis.CUSTOMERS.LABEL, kpis.CUSTOMERS.VALUE, "INDEXED CUSTOMERS", kpis.CUSTOMERS.FORMULA, "#,##0");
+      this.drawKpiBlock(sheet, kpis.AOV.LABEL, kpis.AOV.VALUE, "AVERAGE ORDER VALUE", kpis.AOV.FORMULA, "৳#,##0");
+
+      this.drawSearchConsole(sheet);
+
+      sheet.setColumnWidth(1, 140);
+      sheet.setColumnWidth(2, 140);
+      sheet.setColumnWidth(3, 40);
+      sheet.setColumnWidth(4, 140);
+      sheet.setColumnWidth(5, 140);
+      sheet.setColumnWidth(6, 40);
+      sheet.setColumnWidth(7, 160);
+      sheet.setColumnWidth(8, 160);
+    } catch (e) {
+      console.error("Dashboard render exception: " + e.toString());
+    }
+  },
+
+  drawKpiBlock: function(sheet, labelRangeStr, valueRangeStr, title, formula, numberFormat) {
+    var labelRange = sheet.getRange(labelRangeStr);
+    labelRange.merge()
+      .setValue(title)
+      .setFontFamily("Inter")
+      .setFontSize(8)
+      .setFontWeight("bold")
+      .setFontColor(CONFIG.THEME.TEXT_MUTED)
+      .setHorizontalAlignment("center")
+      .setVerticalAlignment("middle")
+      .setBackground("#FAFAFA");
+
+    var valueRange = sheet.getRange(valueRangeStr);
+    valueRange.merge()
+      .setValue(formula)
+      .setFontFamily("Inter")
+      .setFontSize(16)
+      .setFontWeight("bold")
+      .setFontColor(CONFIG.THEME.PRIMARY_DARK)
+      .setHorizontalAlignment("center")
+      .setVerticalAlignment("middle")
+      .setBackground("#FAFAFA")
+      .setNumberFormat(numberFormat);
+
+    var fullBlock = sheet.getRange(labelRange.getRow(), labelRange.getColumn(), 2, labelRange.getNumColumns());
+    fullBlock.setBorder(true, true, true, true, null, null, CONFIG.THEME.BORDER_LIGHT, SpreadsheetApp.BorderStyle.SOLID);
+  },
+
+  drawSearchConsole: function(sheet) {
+    sheet.getRange("G4:H4").merge()
+      .setValue("VIP CLIENT SEARCH CONSOLE")
+      .setFontFamily("Inter")
+      .setFontSize(8)
+      .setFontWeight("bold")
+      .setFontColor(CONFIG.THEME.TEXT_LIGHT)
+      .setHorizontalAlignment("center")
+      .setVerticalAlignment("middle")
+      .setBackground(CONFIG.THEME.PRIMARY_DARK);
+
+    sheet.getRange("G5").setValue("Search query (Name/Phone/ID):")
+      .setFontFamily("Inter")
+      .setFontSize(8)
+      .setFontColor(CONFIG.THEME.TEXT_MUTED)
+      .setVerticalAlignment("middle");
+
+    var searchInput = sheet.getRange("G6");
+    searchInput.setValue("")
+      .setFontFamily("Inter")
+      .setFontSize(11)
+      .setBackground("#FAFAFA")
+      .setHorizontalAlignment("left")
+      .setVerticalAlignment("middle");
+    searchInput.setBorder(true, true, true, true, null, null, CONFIG.THEME.BORDER_LIGHT, SpreadsheetApp.BorderStyle.SOLID);
+
+    var runBtn = sheet.getRange("H5");
+    runBtn.setValue("🔍 RUN QUERY")
+      .setFontFamily("Inter")
+      .setFontSize(8)
+      .setFontWeight("bold")
+      .setFontColor(CONFIG.THEME.TEXT_LIGHT)
+      .setBackground(CONFIG.THEME.PRIMARY_DARK)
+      .setHorizontalAlignment("center")
+      .setVerticalAlignment("middle");
+
+    var clearBtn = sheet.getRange("H6");
+    clearBtn.setValue("✕ CLEAR INPUT")
+      .setFontFamily("Inter")
+      .setFontSize(8)
+      .setFontWeight("bold")
+      .setFontColor(CONFIG.THEME.PRIMARY_DARK)
+      .setBackground("#FAFAFA")
+      .setHorizontalAlignment("center")
+      .setVerticalAlignment("middle");
+      
+    sheet.getRange("G4:H6").setBorder(true, true, true, true, null, null, CONFIG.THEME.PRIMARY_DARK, SpreadsheetApp.BorderStyle.SOLID);
+  },
+
+  handleSelectionTrigger: function(row, col) {
+    if (row === 5 && col === 8) {
+      this.executeSearchQuery();
+    } else if (row === 6 && col === 8) {
+      this.clearSearchQuery();
+    }
+  },
+
+  executeSearchQuery: function() {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var dashSheet = ss.getSheetByName(CONFIG.SHEETS.DASHBOARD);
+      var query = dashSheet.getRange("G6").getValue().toString().trim().toLowerCase();
+      
+      if (!query) {
+        SpreadsheetApp.getUi().alert("Roy Men Concierge", "Please type a phone number, customer name, or order ID in [G6] first.", SpreadsheetApp.getUi().ButtonSet.OK);
+        return;
+      }
+
+      var ordersSheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
+      if (!ordersSheet) return;
+
+      var data = ordersSheet.getDataRange().getValues();
+      var matches = [];
+
+      for (var i = 1; i < data.length; i++) {
+        var row = data[i];
+        var orderId = row[1].toString().toLowerCase();
+        var clientName = row[3].toString().toLowerCase();
+        var phone = row[4].toString().toLowerCase();
+        
+        if (orderId.indexOf(query) !== -1 || clientName.indexOf(query) !== -1 || phone.indexOf(query) !== -1) {
+          matches.push(row);
+        }
+      }
+
+      dashSheet.getRange("A10:H100").clear();
+      
+      if (matches.length === 0) {
+        dashSheet.getRange("A10:H10").merge()
+          .setValue("✕ NO TRANSACTIONS FOUND MATCHING QUERY: '" + query.toUpperCase() + "'")
+          .setFontFamily("Inter")
+          .setFontSize(10)
+          .setFontWeight("bold")
+          .setFontColor(CONFIG.THEME.COLOR_ERROR)
+          .setHorizontalAlignment("center");
+        return;
+      }
+
+      var headers = ["Timestamp", "Order ID", "Customer Name", "Phone", "Payment", "Order Status", "Grand Total", "Courier Status"];
+      dashSheet.getRange("A10:H10").setValues([headers])
+        .setFontFamily("Inter")
+        .setFontSize(8)
+        .setFontWeight("bold")
+        .setFontColor(CONFIG.THEME.TEXT_LIGHT)
+        .setBackground(CONFIG.THEME.PRIMARY_DARK);
+
+      var resultsGrid = [];
+      for (var k = 0; k < matches.length; k++) {
+        var m = matches[k];
+        resultsGrid.push([
+          m[0] ? Utils.formatDateTimeInDhaka(m[0]).substring(0, 10) : "N/A",
+          m[1], m[3], m[4], m[11], m[12], m[21], m[22] || "Pending Assignment"
+        ]);
+      }
+
+      dashSheet.getRange(11, 1, resultsGrid.length, 8).setValues(resultsGrid)
+        .setFontFamily("Inter")
+        .setFontSize(9)
+        .setVerticalAlignment("middle");
+
+      dashSheet.getRange(11, 7, resultsGrid.length, 1).setNumberFormat("৳#,##0");
+      Utils.applyZebraStriping(dashSheet, 11, resultsGrid.length + 10, 8);
+      dashSheet.getRange(10, 1, resultsGrid.length + 1, 8).setBorder(true, true, true, true, true, true, CONFIG.THEME.BORDER_LIGHT, SpreadsheetApp.BorderStyle.SOLID);
+    } catch (e) {
+      console.error("Search failure: " + e.toString());
+    }
+  },
+
+  clearSearchQuery: function() {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var dashSheet = ss.getSheetByName(CONFIG.SHEETS.DASHBOARD);
+      dashSheet.getRange("G6").setValue("");
+      dashSheet.getRange("A10:H100").clear();
+    } catch (e) {
+      console.error("Error clearing search: " + e.toString());
+    }
+  }
+};
+
+// ============================================================================
+// PART 14: REPORTSERVICE.GS (Aggregated Ledger & Time Series Charts)
+// ============================================================================
+
+var ReportService = {
+  /**
+   * Compiles and rebuilds the reports grid with monthly aggregations.
+   */
+  generateReportLedger: function() {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var ordersSheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
+      var reportsSheet = ss.getSheetByName(CONFIG.SHEETS.REPORTS);
+
+      if (!ordersSheet) return;
+      if (!reportsSheet) {
+        reportsSheet = ss.insertSheet(CONFIG.SHEETS.REPORTS);
+      }
+
+      var ordersData = ordersSheet.getDataRange().getValues();
+      if (ordersData.length <= 1) return;
+
+      var colOrderDate = 2;   // Col C
+      var colGrandTotal = 21; // Col V
+      var colStatus = 12;     // Col M
+
+      var monthlyAggregation = {};
+
+      for (var i = 1; i < ordersData.length; i++) {
+        var row = ordersData[i];
+        var orderStatus = row[colStatus] ? row[colStatus].toString().trim() : "Pending";
+        if (orderStatus === "Cancelled" || orderStatus === "Returned") continue;
+
+        var amount = Number(row[colGrandTotal]) || 0;
+        var dateVal = row[colOrderDate];
+
+        var orderDate = (dateVal instanceof Date) ? dateVal : new Date(dateVal);
+        if (isNaN(orderDate.getTime())) continue;
+
+        var monthKey = Utils.formatDateTimeInDhaka(orderDate).substring(0, 7); // "YYYY-MM"
+
+        if (!monthlyAggregation[monthKey]) {
+          monthlyAggregation[monthKey] = { revenue: amount, volume: 1 };
+        } else {
+          monthlyAggregation[monthKey].revenue += amount;
+          monthlyAggregation[monthKey].volume += 1;
+        }
+      }
+
+      var writeBuffer = [];
+      for (var key in monthlyAggregation) {
+        writeBuffer.push([key, monthlyAggregation[key].volume, Math.round(monthlyAggregation[key].revenue)]);
+      }
+
+      writeBuffer.sort(function(a, b) { return a[0].localeCompare(b[0]); });
+
+      reportsSheet.clear();
+      reportsSheet.setGridlines(false);
+
+      reportsSheet.getRange("A1:C1").merge()
+        .setValue("MONTHLY SALES & REVENUE REPORT")
+        .setFontFamily("Inter")
+        .setFontSize(13)
+        .setFontWeight("bold")
+        .setFontColor(CONFIG.THEME.TEXT_LIGHT)
+        .setBackground(CONFIG.THEME.PRIMARY_DARK)
+        .setHorizontalAlignment("center")
+        .setVerticalAlignment("middle");
+
+      reportsSheet.getRange("A2:C2").merge()
+        .setValue("CONFIRMED & FULLY SETTLED TRANSACTIONS ONLY")
+        .setFontFamily("Inter")
+        .setFontSize(8)
+        .setFontColor(CONFIG.THEME.TEXT_MUTED)
+        .setHorizontalAlignment("center");
+
+      reportsSheet.getRange("A4:C4").setValues([["Year-Month", "Orders Volume", "Gross Revenue"]])
+        .setFontFamily("Inter")
+        .setFontSize(9)
+        .setFontWeight("bold")
+        .setBackground("#F0F0F0")
+        .setBorder(true, true, true, true, null, null, CONFIG.THEME.PRIMARY_DARK, SpreadsheetApp.BorderStyle.SOLID);
+
+      if (writeBuffer.length > 0) {
+        reportsSheet.getRange(5, 1, writeBuffer.length, 3).setValues(writeBuffer)
+          .setFontFamily("Inter")
+          .setFontSize(9);
+        
+        var maxRow = writeBuffer.length + 4;
+        reportsSheet.getRange(5, 3, writeBuffer.length, 1).setNumberFormat("৳#,##0");
+        Utils.applyZebraStriping(reportsSheet, 5, maxRow, 3);
+        
+        reportsSheet.getRange(maxRow + 1, 1).setValue("Total Aggregate").setFontWeight("bold");
+        reportsSheet.getRange(maxRow + 1, 2).setValue("=SUM(B5:B" + maxRow + ")").setFontWeight("bold");
+        reportsSheet.getRange(maxRow + 1, 3).setValue("=SUM(C5:C" + maxRow + ")")
+          .setFontWeight("bold")
+          .setNumberFormat("৳#,##0");
+          
+        reportsSheet.getRange(maxRow + 1, 1, 1, 3)
+          .setBorder(true, null, true, null, null, null, CONFIG.THEME.PRIMARY_DARK, SpreadsheetApp.BorderStyle.DOUBLE);
+      }
+      reportsSheet.autoResizeColumns(1, 3);
+    } catch (e) {
+      console.error("Reports aggregation error: " + e.toString());
+    }
+  }
+};
+
+// ============================================================================
+// PART 15: ANALYTICSSERVICE.GS (Interactive Charts Vector Engine)
+// ============================================================================
+
+var AnalyticsService = {
+  /**
+   * Refreshes the embedded charts on the Reports sheet.
+   */
+  generateOperationalCharts: function() {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var reportsSheet = ss.getSheetByName(CONFIG.SHEETS.REPORTS);
+      if (!reportsSheet) return;
+
+      var charts = reportsSheet.getCharts();
+      for (var i = 0; i < charts.length; i++) {
+        reportsSheet.removeChart(charts[i]);
+      }
+
+      var lastRow = reportsSheet.getLastRow();
+      if (lastRow <= 5) return;
+
+      var rangeMonths = reportsSheet.getRange("A4:A" + (lastRow - 2));
+      var rangeRevenue = reportsSheet.getRange("C4:C" + (lastRow - 2));
+
+      var revenueChart = reportsSheet.newChart()
+        .setChartType(Charts.ChartType.COLUMN)
+        .addRange(rangeMonths)
+        .addRange(rangeRevenue)
+        .setNumHeaders(1)
+        .setOption("title", "MONTH-OVER-MONTH REVENUE")
+        .setOption("colors", [CONFIG.THEME.PRIMARY_DARK])
+        .setOption("fontName", "Inter")
+        .setOption("legend", { position: "none" })
+        .setOption("vAxis", { gridlines: { color: CONFIG.THEME.BORDER_LIGHT } })
+        .setOption("chartArea", { width: "80%", height: "70%" })
+        .setPosition(4, 5, 20, 20)
+        .setWidth(550)
+        .setHeight(300)
+        .build();
+
+      reportsSheet.insertChart(revenueChart);
+
+      var rangeVolume = reportsSheet.getRange("B4:B" + (lastRow - 2));
+      var volumeChart = reportsSheet.newChart()
+        .setChartType(Charts.ChartType.AREA)
+        .addRange(rangeMonths)
+        .addRange(rangeVolume)
+        .setNumHeaders(1)
+        .setOption("title", "ORDER VOLUME TRAJECTORY")
+        .setOption("colors", [CONFIG.THEME.ACCENT_GOLD])
+        .setOption("fontName", "Inter")
+        .setOption("legend", { position: "none" })
+        .setOption("vAxis", { gridlines: { color: CONFIG.THEME.BORDER_LIGHT } })
+        .setOption("chartArea", { width: "80%", height: "70%" })
+        .setPosition(20, 5, 20, 20)
+        .setWidth(550)
+        .setHeight(300)
+        .build();
+
+      reportsSheet.insertChart(volumeChart);
+    } catch (e) {
+      console.error("Charts generation failure: " + e.toString());
+    }
+  }
+};
+
+// ============================================================================
+// PART 16: EXPORTSERVICE.GS (Offline Document Compilation Hub)
+// ============================================================================
+
+var ExportService = {
+  exportPdfReport: function() {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getSheetByName(CONFIG.SHEETS.REPORTS);
+      if (!sheet) return;
+
+      var url = ss.getUrl().replace(/edit$/, "") + "export?";
+      var exportOptions = {
+        exportFormat: "pdf", format: "pdf", size: "LETTER", portrait: "true", fitw: "true",
+        gridlines: "false", printtitle: "false", sheetnames: "false", fzr: "false",
+        gid: sheet.getSheetId().toString()
+      };
+
+      var queryParts = [];
+      for (var key in exportOptions) queryParts.push(key + "=" + exportOptions[key]);
+      var downloadUrl = url + queryParts.join("&");
+
+      var htmlOutput = HtmlService.createHtmlOutput(
+        '<p style="font-family: \'Inter\', sans-serif; font-size: 14px; color: #333;">Your PDF report compilation is complete. Please click below to download:</p>' +
+        '<div style="text-align: center; margin: 24px 0;">' +
+        '  <a href="' + downloadUrl + '" target="_blank" style="background-color: #0F0F0F; color: #FFFFFF; text-decoration: none; padding: 12px 30px; font-size: 12px; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase; border-radius: 2px;">Download PDF</a>' +
+        '</div>'
+      ).setWidth(400).setHeight(150);
+
+      SpreadsheetApp.getUi().showModalDialog(htmlOutput, "ROY MEN PDF Export");
+    } catch (e) {
+      SpreadsheetApp.getUi().alert("Export Failed: " + e.toString());
+    }
+  },
+
+  exportCsvOrders: function() {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
+      if (!sheet) return;
+
+      var data = sheet.getDataRange().getValues();
+      var csvContent = "";
+
+      for (var i = 0; i < data.length; i++) {
+        var row = data[i];
+        var escapedFields = [];
+        for (var j = 0; j < row.length; j++) {
+          var field = row[j] ? row[j].toString() : "";
+          if (field.indexOf(",") !== -1 || field.indexOf('"') !== -1 || field.indexOf("\n") !== -1) {
+            field = '"' + field.replace(/"/g, '""') + '"';
+          }
+          escapedFields.push(field);
+        }
+        csvContent += escapedFields.join(",") + "\r\n";
+      }
+
+      var blob = Utilities.newBlob(csvContent, "text/csv", "ROY_MEN_Orders_" + Utils.formatDateTimeInDhaka(new Date()).substring(0, 10) + ".csv");
+      var fileUrl = DriveApp.createFile(blob).getDownloadUrl();
+
+      var htmlOutput = HtmlService.createHtmlOutput(
+        '<p style="font-family: \'Inter\', sans-serif; font-size: 14px; color: #333;">Your CSV order ledger export is complete. Click below to download:</p>' +
+        '<div style="text-align: center; margin: 24px 0;">' +
+        '  <a href="' + fileUrl + '" target="_blank" style="background-color: #0F0F0F; color: #FFFFFF; text-decoration: none; padding: 12px 30px; font-size: 12px; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase; border-radius: 2px;">Download CSV</a>' +
+        '</div>'
+      ).setWidth(400).setHeight(150);
+
+      SpreadsheetApp.getUi().showModalDialog(htmlOutput, "ROY MEN CSV Export");
+    } catch (e) {
+      SpreadsheetApp.getUi().alert("Export Failed: " + e.toString());
+    }
+  },
+
+  exportExcelWorksheet: function() {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var url = ss.getUrl().replace(/edit$/, "") + "export?format=xlsx";
+
+      var htmlOutput = HtmlService.createHtmlOutput(
+        '<p style="font-family: \'Inter\', sans-serif; font-size: 14px; color: #333;">Your entire Google Worksheet converted to MS Excel format is ready:</p>' +
+        '<div style="text-align: center; margin: 24px 0;">' +
+        '  <a href="' + url + '" target="_blank" style="background-color: #0F0F0F; color: #FFFFFF; text-decoration: none; padding: 12px 30px; font-size: 12px; font-weight: bold; letter-spacing: 1.5px; text-transform: uppercase; border-radius: 2px;">Download Excel (.xlsx)</a>' +
+        '</div>'
+      ).setWidth(400).setHeight(150);
+
+      SpreadsheetApp.getUi().showModalDialog(htmlOutput, "ROY MEN Excel Export");
+    } catch (e) {
+      console.error("Excel export error: " + e.toString());
+    }
+  },
+
+  backupOrdersLedger: function() {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var ordersSheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
+      if (!ordersSheet) return;
+
+      var folderIterator = DriveApp.getFoldersByName(CONFIG.BACKUP.FOLDER_NAME);
+      var folder = folderIterator.hasNext() ? folderIterator.next() : DriveApp.createFolder(CONFIG.BACKUP.FOLDER_NAME);
+
+      var data = ordersSheet.getDataRange().getValues();
+      var csvContent = "";
+      for (var i = 0; i < data.length; i++) {
+        var row = data[i];
+        var escapedFields = [];
+        for (var j = 0; j < row.length; j++) {
+          var field = row[j] ? row[j].toString() : "";
+          if (field.indexOf(",") !== -1 || field.indexOf('"') !== -1 || field.indexOf("\n") !== -1) {
+            field = '"' + field.replace(/"/g, '""') + '"';
+          }
+          escapedFields.push(field);
+        }
+        csvContent += escapedFields.join(",") + "\r\n";
+      }
+
+      var fileName = "ROY_MEN_Backup_Orders_" + Utils.formatDateTimeInDhaka(new Date()).replace(/[\s:]/g, "_") + ".csv";
+      var blob = Utilities.newBlob(csvContent, "text/csv", fileName);
+      folder.createFile(blob);
+
+      PropertiesService.getScriptProperties().setProperty(CONFIG.PROPERTIES_KEYS.LAST_BACKUP, new Date().getTime().toString());
+
+      var fileIterator = folder.getFiles();
+      var backupsList = [];
+      while (fileIterator.hasNext()) backupsList.push(fileIterator.next());
+
+      if (backupsList.length > CONFIG.BACKUP.MAX_FILES) {
+        backupsList.sort(function(a, b) { return a.getDateCreated() - b.getDateCreated(); });
+        var toDeleteCount = backupsList.length - CONFIG.BACKUP.MAX_FILES;
+        for (var k = 0; k < toDeleteCount; k++) backupsList[k].setTrashed(true);
+        AuditService.log(CONFIG.LOGGING.LEVELS.INFO, null, "Daily backup cycle processed. Cleaned " + toDeleteCount + " old backup files.");
+      } else {
+        AuditService.log(CONFIG.LOGGING.LEVELS.INFO, null, "Daily backup created successfully: '" + fileName + "'");
+      }
+    } catch (e) {
+      console.error("Backup creation failed: " + e.toString());
+    }
+  }
+};
+
+// ============================================================================
+// PART 17: TRIGGERSERVICE.GS (Programmatic System Schedulers)
+// ============================================================================
+
+var TriggerService = {
+  setupAutomatedCronTriggers: function() {
+    try {
+      this.clearAllSystemTriggers();
+
+      ScriptApp.newTrigger("runEvery5Minutes")
+        .timeBased()
+        .everyMinutes(CONFIG.TRIGGERS.RETRY_QUEUE_INTERVAL_MIN)
+        .create();
+
+      ScriptApp.newTrigger("backupOrdersLedger")
+        .timeBased()
+        .everyHours(CONFIG.TRIGGERS.BACKUP_INTERVAL_HOURS)
+        .create();
+
+      ScriptApp.newTrigger("recalculateCatalogAndAnalytics")
+        .timeBased()
+        .everyHours(CONFIG.TRIGGERS.ANALYTICS_INTERVAL_HOURS)
+        .create();
+
+      AuditService.log(
+        CONFIG.LOGGING.LEVELS.INFO,
+        null,
+        "System background triggers installed successfully."
+      );
+    } catch (e) {
+      console.error("Scheduler setup exception: " + e.toString());
+    }
+  },
+
+  clearAllSystemTriggers: function() {
+    try {
+      var triggers = ScriptApp.getProjectTriggers();
+      for (var i = 0; i < triggers.length; i++) ScriptApp.deleteTrigger(triggers[i]);
+    } catch (e) {
+      console.error("Error purging triggers: " + e.toString());
+    }
+  }
+};
+
+// ============================================================================
+// PART 18: ORDERSERVICE.GS (Transactional Ledger Mutator)
+// ============================================================================
+
+var OrderService = {
+  insertOrder: function(p) {
+    var lock = LockService.getScriptLock();
+    var isLocked = lock.tryLock(CONFIG.LOCK_TIMEOUT_MS);
+    
+    if (!isLocked) {
+      throw new Error("Transactional lock timeout. Sheet database is congested.");
+    }
+
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
+      if (!sheet) throw new Error("Orders sheet not found.");
+
+      var orderIdIndex = CONFIG.HEADERS.ORDERS.indexOf("Order ID") + 1;
+      var duplicateRow = this.findRowByOrderId(sheet, p.orderId, orderIdIndex);
+      
+      if (duplicateRow !== -1) {
+        throw new Error("Duplicate Order detected. Order ID " + p.orderId + " already registered.");
+      }
+
+      var rowValues = this.mapPayloadToRowArray(p);
+      sheet.appendRow(rowValues);
+      var appendedRowIndex = sheet.getLastRow();
+      
+      this.sortOrdersNewestFirst(sheet);
+
+      HistoryService.logOrderStatus(p.orderId, "", p.orderStatus || "Pending", "System Webhook");
+      HistoryService.logPaymentStatus(p.orderId, "", p.paymentStatus || "Pending", "System Webhook");
+      AuditService.log("Order Inserted", p.orderId, "New checkout captured successfully.");
+
+      this.beautifyOrdersSheet(sheet);
+      this.updateDependentMetrics();
+
+      try {
+        EmailService.sendOrderStatusNotification(p, p.orderStatus || "Pending");
+      } catch (emErr) { console.error("Email failed: " + emErr.toString()); }
+
+      try {
+        EmailService.sendAdminAlertNotification(p);
+      } catch (adErr) { console.error("Email failed: " + adErr.toString()); }
+
+      return { success: true, code: "ORDER_CREATED", orderId: p.orderId, row: appendedRowIndex };
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  updateOrder: function(p) {
+    var lock = LockService.getScriptLock();
+    var isLocked = lock.tryLock(CONFIG.LOCK_TIMEOUT_MS);
+    
+    if (!isLocked) throw new Error("Transactional lock timeout.");
+
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
+      if (!sheet) throw new Error("Orders sheet not found.");
+
+      var orderIdIndex = CONFIG.HEADERS.ORDERS.indexOf("Order ID") + 1;
+      var row = this.findRowByOrderId(sheet, p.orderId, orderIdIndex);
+
+      if (row === -1) throw new Error("Order ID " + p.orderId + " does not exist.");
+
+      var colPaymentStatus = CONFIG.HEADERS.ORDERS.indexOf("Payment Status") + 1;
+      var colOrderStatus = CONFIG.HEADERS.ORDERS.indexOf("Order Status") + 1;
+      var colNotes = CONFIG.HEADERS.ORDERS.indexOf("Notes") + 1;
+
+      var currentPayment = sheet.getRange(row, colPaymentStatus).getValue();
+      var currentOrder = sheet.getRange(row, colOrderStatus).getValue();
+      var currentNotes = sheet.getRange(row, colNotes).getValue();
+
+      if (p.notes === undefined || p.notes === null || p.notes.toString().trim() === "") {
+        p.notes = currentNotes;
+      }
+
+      var statusChanged = false;
+      if (p.orderStatus && p.orderStatus !== currentOrder) {
+        HistoryService.logOrderStatus(p.orderId, currentOrder, p.orderStatus, "System Webhook");
+        statusChanged = true;
+      }
+
+      if (p.paymentStatus && p.paymentStatus !== currentPayment) {
+        HistoryService.logPaymentStatus(p.orderId, currentPayment, p.paymentStatus, "System Webhook");
+      }
+
+      var updatedValues = this.mapPayloadToRowArray(p);
+      sheet.getRange(row, 1, 1, CONFIG.HEADERS.ORDERS.length).setValues([updatedValues]);
+
+      this.beautifyOrdersSheet(sheet);
+      this.updateDependentMetrics();
+
+      if (statusChanged) {
+        try {
+          EmailService.sendOrderStatusNotification(p, p.orderStatus);
+        } catch (emErr) { console.error("Email failed: " + emErr.toString()); }
+      }
+
+      return { success: true, code: "ORDER_UPDATED", orderId: p.orderId, row: row };
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  deleteOrder: function(orderId) {
+    var lock = LockService.getScriptLock();
+    var isLocked = lock.tryLock(CONFIG.LOCK_TIMEOUT_MS);
+    if (!isLocked) throw new Error("Transactional lock timeout.");
+
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
+      if (!sheet) throw new Error("Orders sheet not found.");
+
+      var orderIdIndex = CONFIG.HEADERS.ORDERS.indexOf("Order ID") + 1;
+      var row = this.findRowByOrderId(sheet, orderId, orderIdIndex);
+
+      if (row === -1) throw new Error("Order ID " + orderId + " does not exist.");
+
+      sheet.deleteRow(row);
+      AuditService.log("Order Deleted", orderId, "Order removed from spreadsheet ledger.");
+      this.updateDependentMetrics();
+
+      return { success: true, code: "ORDER_DELETED", orderId: orderId };
+    } finally {
+      lock.releaseLock();
+    }
+  },
+
+  findRowByOrderId: function(sheet, orderId, orderIdColumn) {
+    if (!orderId) return -1;
+    var cleanId = orderId.toString().trim().toLowerCase();
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return -1;
+
+    var data = sheet.getRange(2, orderIdColumn, lastRow - 1, 1).getValues();
+    for (var i = 0; i < data.length; i++) {
+      if (data[i][0].toString().trim().toLowerCase() === cleanId) {
+        return i + 2;
+      }
+    }
+    return -1;
+  },
+
+  mapPayloadToRowArray: function(p) {
+    var timestamp = p.timestamp ? new Date(p.timestamp) : new Date();
+    var orderDate = p.orderDate ? p.orderDate.toString() : Utils.formatDateTimeInDhaka(timestamp).substring(0, 10);
+    
+    return [
+      Utils.formatDateTimeInDhaka(timestamp),                       // Timestamp Col A
+      p.orderId ? p.orderId.toString().trim() : "N/A",              // Order ID Col B
+      orderDate,                                                    // Order Date Col C
+      p.customerName ? p.customerName.toString().trim() : "N/A",    // Customer Name Col D
+      p.phone ? p.phone.toString().trim() : "N/A",                  // Phone Col E
+      p.email ? p.email.toString().trim() : "N/A",                  // Email Col F
+      p.address ? p.address.toString().trim() : "N/A",              // Address Col G
+      p.division ? p.division.toString().trim() : "N/A",            // Division Col H
+      p.district ? p.district.toString().trim() : "N/A",            // District Col I
+      p.postalCode ? p.postalCode.toString().trim() : "",           // Postal Code Col J
+      p.paymentMethod ? p.paymentMethod.toString().trim() : "COD",  // Payment Method Col K
+      p.paymentStatus ? p.paymentStatus.toString().trim() : "Pending", // Payment Status Col L
+      p.orderStatus ? p.orderStatus.toString().trim() : "Pending",     // Order Status Col M
+      p.products ? p.products.toString().trim() : "",               // Products Col N
+      p.sizes ? p.sizes.toString().trim() : "",                     // Sizes Col O
+      p.colors ? p.colors.toString().trim() : "",                   // Colors Col P
+      p.quantity !== undefined ? Number(p.quantity) : 1,            // Quantity Col Q
+      p.unitPrice !== undefined ? Number(p.unitPrice) : 0,          // Unit Price Col R
+      p.subtotal !== undefined ? Number(p.subtotal) : 0,            // Subtotal Col S
+      p.deliveryCharge !== undefined ? Number(p.deliveryCharge) : 0,// Delivery Charge Col T
+      p.discount !== undefined ? Number(p.discount) : 0,            // Discount Col U
+      p.grandTotal !== undefined ? Number(p.grandTotal) : 0,        // Grand Total Col V
+      p.courierName ? p.courierName.toString().trim() : "",         // Courier Name Col W
+      p.trackingNumber ? p.trackingNumber.toString().trim() : "",   // Tracking Number Col X
+      p.trackingUrl ? p.trackingUrl.toString().trim() : "",         // Tracking URL Col Y
+      p.notes ? p.notes.toString().trim() : "",                     // Notes Col Z
+      p.customerIp ? p.customerIp.toString().trim() : "127.0.0.1",  // Customer IP Col AA
+      p.browser ? p.browser.toString().trim() : "Server Agent"      // Browser Col AB
+    ];
+  },
+
+  sortOrdersNewestFirst: function(sheet) {
+    var lastRow = sheet.getLastRow();
+    if (lastRow <= 2) return;
+    sheet.getRange(2, 1, lastRow - 1, CONFIG.HEADERS.ORDERS.length).sort({ column: 1, ascending: false });
+  },
+
+  updateDependentMetrics: function() {
+    try {
+      CustomerService.reindexAllCustomers();
+      ProductService.reindexAllProducts();
+      ReportService.generateReportLedger();
+      AnalyticsService.generateOperationalCharts();
+    } catch (e) {
+      console.error("Metric sync failure: " + e.toString());
+    }
+  },
+
+  beautifyOrdersSheet: function(sheet) {
+    try {
+      var lastRow = sheet.getLastRow();
+      if (lastRow <= 1) return;
+
+      var totalCols = CONFIG.HEADERS.ORDERS.length;
+      
+      sheet.getRange(2, 1, lastRow - 1, totalCols).setFontFamily("Inter").setFontSize(9);
+      sheet.getRange(2, 18, lastRow - 1, 5).setNumberFormat("৳#,##0");
+      
+      Utils.applyZebraStriping(sheet, 2, lastRow, totalCols);
+      
+      var colPaymentStatus = CONFIG.HEADERS.ORDERS.indexOf("Payment Status") + 1;
+      var colOrderStatus = CONFIG.HEADERS.ORDERS.indexOf("Order Status") + 1;
+
+      var paymentRule = SpreadsheetApp.newDataValidation().requireValueInList(CONFIG.PAYMENT_STATUSES).build();
+      var orderRule = SpreadsheetApp.newDataValidation().requireValueInList(CONFIG.ORDER_STATUSES).build();
+
+      sheet.getRange(2, colPaymentStatus, lastRow - 1, 1).setDataValidation(paymentRule);
+      sheet.getRange(2, colOrderStatus, lastRow - 1, 1).setDataValidation(orderRule);
+
+      this.applyOrderStatusFormatting(sheet, lastRow, colOrderStatus, colPaymentStatus);
+      sheet.autoResizeColumns(1, totalCols);
+    } catch (e) {
+      console.error("Error formatting Orders sheet: " + e.toString());
+    }
+  },
+
+  applyOrderStatusFormatting: function(sheet, lastRow, colOrderStatus, colPaymentStatus) {
+    for (var r = 2; r <= lastRow; r++) {
+      try {
+        var ordStatus = sheet.getRange(r, colOrderStatus).getValue().toString().toUpperCase();
+        var payStatus = sheet.getRange(r, colPaymentStatus).getValue().toString().toUpperCase();
+
+        var ordColor = CONFIG.THEME.STATUS[ordStatus] || { BG: "#FFFFFF", TEXT: "#000000" };
+        var payColor = CONFIG.THEME.PAYMENT[payStatus] || { BG: "#FFFFFF", TEXT: "#000000" };
+
+        sheet.getRange(r, colOrderStatus).setBackground(ordColor.BG).setFontColor(ordColor.TEXT).setFontWeight("bold");
+        sheet.getRange(r, colPaymentStatus).setBackground(payColor.BG).setFontColor(payColor.TEXT).setFontWeight("bold");
+      } catch (err) {}
+    }
+  }
+};
+
+// ============================================================================
+// PART 19: ROUTES.GS (Request Routing Handlers)
+// ============================================================================
+
+function doGet(e) {
   try {
-    var props = PropertiesService.getScriptProperties();
-    var total = Number(props.getProperty("TOTAL_REQUESTS") || "0") + 1;
-    var failed = Number(props.getProperty("FAILED_REQUESTS") || "0") + (isSuccess ? 0 : 1);
-    props.setProperty("TOTAL_REQUESTS", total.toString());
-    props.setProperty("FAILED_REQUESTS", failed.toString());
-    props.setProperty("LAST_SYNC_TIME", new Date().getTime().toString());
-  } catch(e) {}
+    if (!SecurityService.verifyApiKey(e)) {
+      return Utils.createJsonResponse({
+        status: "unauthorized", code: "INVALID_API_KEY", message: "Request rejected: invalid API key."
+      }, 401);
+    }
+    App.initializeAllSheets();
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ordersSheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
+    var orderRows = ordersSheet ? ordersSheet.getLastRow() : 0;
+    var orderCount = orderRows > 1 ? orderRows - 1 : 0;
+
+    return Utils.createJsonResponse({
+      status: "active",
+      engine: CONFIG.PROJECT_NAME,
+      version: CONFIG.VERSION,
+      systemMetrics: { totalOrdersRecorded: orderCount, spreadsheetUrl: ss.getUrl() }
+    }, 200);
+  } catch (err) {
+    return Utils.createJsonResponse({ status: "error", code: "ROUTER_GET_EXCEPTION", message: err.toString() }, 500);
+  }
 }
+
+function doPost(e) {
+  var rawBody = e && e.postData && e.postData.contents ? e.postData.contents : "";
+  try {
+    if (!rawBody) {
+      return Utils.createJsonResponse({ status: "error", code: "EMPTY_PAYLOAD", message: "No body content received." }, 400);
+    }
+
+    var payload = Utils.safeJsonParse(rawBody);
+    if (!payload) {
+      return Utils.createJsonResponse({ status: "error", code: "INVALID_JSON", message: "Malformed JSON format." }, 400);
+    }
+
+    if (!SecurityService.verifyApiKey(e)) {
+      return Utils.createJsonResponse({ status: "unauthorized", code: "INVALID_API_KEY", message: "Request rejected: invalid API key." }, 401);
+    }
+
+    if (!SecurityService.verifyWebhookSignature(e, rawBody)) {
+      return Utils.createJsonResponse({
+        status: "unauthorized", code: "INVALID_SIGNATURE", message: "HMAC signature verification failed."
+      }, 401);
+    }
+
+    App.initializeAllSheets();
+    var action = payload.action ? payload.action.toString().trim().toLowerCase() : "insert";
+
+    if (action === "delete") {
+      if (!payload.orderId) {
+        return Utils.createJsonResponse({ status: "error", code: "MISSING_ORDER_ID", message: "orderId is required." }, 400);
+      }
+      var result = OrderService.deleteOrder(payload.orderId);
+      return Utils.createJsonResponse(result, 200);
+    }
+
+    var validation = ValidationService.validateOrder(payload);
+    if (!validation.isValid) {
+      return Utils.createJsonResponse({
+        status: "error", code: "VALIDATION_FAILED", message: "Constraints violated: " + validation.errors.join(", ")
+      }, 400);
+    }
+
+    if (action === "update") {
+      var result = OrderService.updateOrder(payload);
+      return Utils.createJsonResponse(result, 200);
+    } else {
+      var result = OrderService.insertOrder(payload);
+      return Utils.createJsonResponse(result, 201);
+    }
+  } catch (err) {
+    AuditService.log(CONFIG.LOGGING.LEVELS.ERROR, null, "Webhook route crashed: " + err.toString());
+    return Utils.createJsonResponse({ status: "error", code: "ROUTER_POST_EXCEPTION", message: err.toString() }, 500);
+  }
+}
+
+// ============================================================================
+// PART 20: APP.GS (Universal Entrypoints and Listeners)
+// ============================================================================
+
+var App = {
+  initializeAllSheets: function() {
+    try {
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+      DashboardService.initializeDashboard();
+
+      this.ensureSheetExists(ss, CONFIG.SHEETS.ORDERS, CONFIG.HEADERS.ORDERS);
+      this.ensureSheetExists(ss, CONFIG.SHEETS.PRODUCTS, CONFIG.HEADERS.PRODUCTS);
+      this.ensureSheetExists(ss, CONFIG.SHEETS.CUSTOMERS, CONFIG.HEADERS.CUSTOMERS);
+      this.ensureSheetExists(ss, CONFIG.SHEETS.ORDER_HISTORY, CONFIG.HEADERS.ORDER_HISTORY);
+      this.ensureSheetExists(ss, CONFIG.SHEETS.PAYMENT_HISTORY, CONFIG.HEADERS.PAYMENT_HISTORY);
+      this.ensureSheetExists(ss, CONFIG.SHEETS.AUDIT_LOG, CONFIG.HEADERS.AUDIT_LOG);
+
+      SettingsService.initializeSettingsSheet(ss);
+
+      ReportService.generateReportLedger();
+      AnalyticsService.generateOperationalCharts();
+
+      OrderService.beautifyOrdersSheet(ss.getSheetByName(CONFIG.SHEETS.ORDERS));
+      CustomerService.applyCustomerFormatting(ss.getSheetByName(CONFIG.SHEETS.CUSTOMERS));
+      ProductService.applyProductFormatting(ss.getSheetByName(CONFIG.SHEETS.PRODUCTS));
+
+      AuditService.log(CONFIG.LOGGING.LEVELS.INFO, null, "Entire enterprise sheet database initialized successfully.");
+    } catch (err) {
+      console.error("System initialization exception: " + err.toString());
+    }
+  },
+
+  ensureSheetExists: function(ss, sheetName, headers) {
+    var sheet = ss.getSheetByName(sheetName);
+    if (!sheet) {
+      sheet = ss.insertSheet(sheetName);
+      sheet.appendRow(headers);
+      sheet.getRange(1, 1, 1, headers.length)
+        .setBackground(CONFIG.THEME.PRIMARY_DARK)
+        .setFontColor(CONFIG.THEME.TEXT_LIGHT)
+        .setFontWeight("bold")
+        .setFontFamily("Inter");
+      sheet.setFrozenRows(1);
+      sheet.autoResizeColumns(1, headers.length);
+    }
+    return sheet;
+  }
+};
+
+function onOpen() {
+  try {
+    var ui = SpreadsheetApp.getUi();
+    ui.createMenu("🏆 ROY MEN Dashboard")
+      .addItem("📊 Refresh Dashboard Data", "refreshDashboard")
+      .addItem("🔄 Rebuild Structure & Schemas", "initializeAllSheets")
+      .addItem("🕒 Setup Scheduled Triggers", "createTimeDrivenTriggers")
+      .addSeparator()
+      .addItem("📄 Export PDF Report", "exportPdfReport")
+      .addItem("📝 Export CSV Orders", "exportCsvOrders")
+      .addItem("📈 Export Excel Worksheet", "exportExcelWorksheet")
+      .addSeparator()
+      .addItem("💾 Backup Orders Ledger", "backupOrdersLedger")
+      .addToUi();
+  } catch (e) { console.error("Menu failed: " + e.toString()); }
+}
+
+function onEdit(e) {
+  if (!e) return;
+  try {
+    var range = e.range;
+    var sheet = range.getSheet();
+    if (sheet.getName() !== CONFIG.SHEETS.ORDERS) return;
+
+    var row = range.getRow();
+    var col = range.getColumn();
+    if (row <= 1) return;
+
+    var orderId = sheet.getRange(row, 2).getValue().toString().trim();
+    if (!orderId) return;
+
+    var email = Session.getActiveUser().getEmail() || "Admin (Manual)";
+    var targetCols = [12, 13, 23, 24, 25, 26];
+    var isTargetCol = targetCols.indexOf(col) !== -1;
+
+    if (!isTargetCol) return;
+
+    if (col === 13) {
+      var prevStatus = e.oldValue || "None";
+      var newStatus = range.getValue().toString().trim();
+      HistoryService.logOrderStatus(orderId, prevStatus, newStatus, email);
+      AuditService.log("Manual Status Edit", orderId, "Status shifted from '" + prevStatus + "' to '" + newStatus + "' by " + email);
+      
+      try {
+        var ordersData = sheet.getRange(row, 1, 1, CONFIG.HEADERS.ORDERS.length).getValues()[0];
+        var orderPayload = {
+          orderId: orderId, customerName: ordersData[3], email: ordersData[5],
+          subtotal: ordersData[18], deliveryCharge: ordersData[19], discount: ordersData[20], grandTotal: ordersData[21],
+          products: ordersData[13], sizes: ordersData[14], colors: ordersData[15],
+          courierName: ordersData[22], trackingNumber: ordersData[23], trackingUrl: ordersData[24]
+        };
+        EmailService.sendOrderStatusNotification(orderPayload, newStatus);
+      } catch (err) { console.error("Notification failed: " + err.toString()); }
+
+    } else if (col === 12) {
+      var prevPay = e.oldValue || "None";
+      var newPay = range.getValue().toString().trim();
+      HistoryService.logPaymentStatus(orderId, prevPay, newPay, email);
+      AuditService.log("Manual Payment Edit", orderId, "Payment shifted by " + email);
+    }
+
+    var ordersData = sheet.getRange(row, 1, 1, CONFIG.HEADERS.ORDERS.length).getValues()[0];
+    var syncPayload = {
+      orderId: orderId, orderStatus: ordersData[12], paymentStatus: ordersData[11],
+      courierName: ordersData[22], trackingNumber: ordersData[23], trackingUrl: ordersData[24],
+      notes: ordersData[25], updatedAt: new Date().toISOString()
+    };
+
+    WebhookService.syncStatusToBackend(syncPayload);
+    refreshDashboard();
+  } catch (err) { console.error("onEdit failed: " + err.toString()); }
+}
+
+function onSelectionChange(e) {
+  if (!e) return;
+  try {
+    var range = e.range;
+    var sheet = range.getSheet();
+    if (sheet.getName() !== CONFIG.SHEETS.DASHBOARD) return;
+    DashboardService.handleSelectionTrigger(range.getRow(), range.getColumn());
+  } catch (err) { console.error("onSelectionChange failed: " + err.toString()); }
+}
+
+function initializeAllSheets() { App.initializeAllSheets(); }
+
+function refreshDashboard() {
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var ordersSheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
+    if (ordersSheet) OrderService.beautifyOrdersSheet(ordersSheet);
+    OrderService.updateDependentMetrics();
+    PropertiesService.getScriptProperties().setProperty(CONFIG.PROPERTIES_KEYS.LAST_DASHBOARD_REFRESH, new Date().getTime().toString());
+  } catch (e) { console.error("Error refreshing dashboard: " + e.toString()); }
+}
+
+function runEvery5Minutes() {
+  WebhookService.processFailedSyncQueue();
+  EmailService.processFailedEmailQueue();
+}
+
+function createTimeDrivenTriggers() {
+  TriggerService.setupAutomatedCronTriggers();
+  SpreadsheetApp.getUi().alert("ROY MEN Engine", "Automated background trigger crons installed successfully.", SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
+function exportPdfReport() { ExportService.exportPdfReport(); }
+function exportCsvOrders() { ExportService.exportCsvOrders(); }
+function exportExcelWorksheet() { ExportService.exportExcelWorksheet(); }
+function backupOrdersLedger() { ExportService.backupOrdersLedger(); }
+function recalculateCatalogAndAnalytics() { OrderService.updateDependentMetrics(); }
