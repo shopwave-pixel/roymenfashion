@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import dns from 'dns';
 
 // Fully typed interface for SMTP Configuration
 interface EmailConfig {
@@ -52,8 +53,17 @@ export const getTransporter = (): nodemailer.Transporter => {
       tls: {
         rejectUnauthorized: false, // Prevents issues with self-signed certs in sandboxes
         minVersion: 'TLSv1.2'      // Enforce modern secure TLS version
+      },
+      // Force IPv4 DNS resolution to prevent IPv6 ENETUNREACH errors on platforms like Railway
+      lookup: (hostname: string, options: any, callback: any) => {
+        if (typeof options === 'function') {
+          callback = options;
+          options = {};
+        }
+        const dnsOpts = typeof options === 'object' && options !== null ? { ...options, family: 4 } : { family: 4 };
+        dns.lookup(hostname, dnsOpts, callback);
       }
-    });
+    } as any);
   }
   return transporter;
 };
@@ -73,11 +83,20 @@ export async function verifySmtpConnection(): Promise<{ success: boolean; error?
       };
     }
     console.log('[ROYMEN SMTP Pre-Verification] Executing transporter.verify()...');
-    await activeTransporter.verify();
+    
+    try {
+      await activeTransporter.verify();
+    } catch (verifyErr: any) {
+      console.error('[ROYMEN SMTP Verify Error Caught via activeTransporter.verify()]');
+      console.error(verifyErr); // Log complete error object
+      throw verifyErr;
+    }
+    
     console.log('[ROYMEN SMTP Pre-Verification] SMTP connection verified successfully (transporter.verify() passed).');
     return { success: true };
   } catch (error: any) {
     console.error('[ROYMEN SMTP Pre-Verification] Failed with error:', error.message || error);
+    console.error(error); // Log complete error object
     if (error) {
       console.error('=================== DETAILED SMTP VERIFY EXCEPTION ===================');
       console.error(`- ERROR MESSAGE:  ${error.message || 'N/A'}`);
@@ -122,16 +141,24 @@ export async function sendEmail(to: string, subject: string, html: string, throw
       throw verification.error || new Error('SMTP pre-verification check failed.');
     }
 
-    await activeTransporter.sendMail({
-      from,
-      to,
-      subject,
-      html
-    });
+    try {
+      await activeTransporter.sendMail({
+        from,
+        to,
+        subject,
+        html
+      });
+    } catch (sendErr: any) {
+      console.error('[ROYMEN SMTP sendMail Error Caught via activeTransporter.sendMail()]');
+      console.error(sendErr); // Log complete error object
+      throw sendErr;
+    }
+    
     console.log(`[ROYMEN Email] Dispatched successfully to: ${to} | Subject: ${subject}`);
     return true;
   } catch (error: any) {
     console.error(`[ROYMEN Email Error] Failed sending email to ${to}:`, error.message || error);
+    console.error(error); // Log complete error object
     
     // 11. Improve error logging to display: message, code, command, response, responseCode, errno, syscall, address, port, stack
     if (error) {

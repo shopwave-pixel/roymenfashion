@@ -1956,6 +1956,21 @@ app.get('/api/test-email', async (req, res) => {
   const smtpVerify = await verifySmtpConnection();
   if (!smtpVerify.success) {
     const verifyErr = smtpVerify.error || {};
+    console.error('[ROYMEN TestEmail] SMTP pre-verification failed (transporter.verify() failed). Email dispatch halted.');
+    console.error(verifyErr); // Log complete error object
+    if (verifyErr) {
+      console.error(`- error.message:      ${verifyErr.message || 'N/A'}`);
+      console.error(`- error.code:         ${verifyErr.code || 'N/A'}`);
+      console.error(`- error.command:      ${verifyErr.command || 'N/A'}`);
+      console.error(`- error.response:     ${verifyErr.response || 'N/A'}`);
+      console.error(`- error.responseCode: ${verifyErr.responseCode || 'N/A'}`);
+      console.error(`- error.errno:        ${verifyErr.errno || 'N/A'}`);
+      console.error(`- error.syscall:      ${verifyErr.syscall || 'N/A'}`);
+      console.error(`- error.address:      ${verifyErr.address || 'N/A'}`);
+      console.error(`- error.port:         ${verifyErr.port || 'N/A'}`);
+      console.error(`- error.stack:        ${verifyErr.stack || 'N/A'}`);
+    }
+    
     return res.status(500).json({
       status: 'error',
       message: 'SMTP pre-verification failed (transporter.verify() failed). Email dispatch halted.',
@@ -2031,6 +2046,21 @@ app.get('/api/test-email', async (req, res) => {
       return res.status(500).json({ status: 'error', message: 'Failed to route SMTP mail. Inspect server terminal logs for detailed stacktrace.' });
     }
   } catch (error: any) {
+    console.error('[ROYMEN TestEmail] SMTP route sending failure caught:');
+    console.error(error); // Log complete error object
+    if (error) {
+      console.error(`- error.message:      ${error.message || 'N/A'}`);
+      console.error(`- error.code:         ${error.code || 'N/A'}`);
+      console.error(`- error.command:      ${error.command || 'N/A'}`);
+      console.error(`- error.response:     ${error.response || 'N/A'}`);
+      console.error(`- error.responseCode: ${error.responseCode || 'N/A'}`);
+      console.error(`- error.errno:        ${error.errno || 'N/A'}`);
+      console.error(`- error.syscall:      ${error.syscall || 'N/A'}`);
+      console.error(`- error.address:      ${error.address || 'N/A'}`);
+      console.error(`- error.port:         ${error.port || 'N/A'}`);
+      console.error(`- error.stack:        ${error.stack || 'N/A'}`);
+    }
+    
     return res.status(500).json({
       status: 'error',
       message: 'Failed to route SMTP mail. Inspect server terminal logs for detailed stacktrace.',
