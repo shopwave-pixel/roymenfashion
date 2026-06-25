@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import dns from 'dns';
+import net from 'net';
 import { createServer as createViteServer } from 'vite';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
@@ -2094,6 +2096,130 @@ app.get('/api/test-email', async (req, res) => {
       stack: error.stack || 'N/A'
     });
   }
+});
+
+// Helper to perform DNS lookups for both families safely
+const performDnsLookup = async (hostname: string) => {
+  const result = { ipv4: [] as string[], ipv6: [] as string[], error: null as any };
+  try {
+    const addresses = await dns.promises.lookup(hostname, { all: true });
+    for (const entry of addresses) {
+      if (entry.family === 4) {
+        result.ipv4.push(entry.address);
+      } else if (entry.family === 6) {
+        result.ipv6.push(entry.address);
+      }
+    }
+  } catch (err: any) {
+    result.error = err.message || err;
+  }
+  return result;
+};
+
+// Helper to check TCP connection connectivity
+const testTcpConnection = (host: string, port: number, timeoutMs = 10000): Promise<{
+  success: boolean;
+  durationMs: number;
+  error?: string;
+  timeoutReason?: string;
+}> => {
+  return new Promise((resolve) => {
+    const startTime = Date.now();
+    let completed = false;
+
+    const socket = net.createConnection({ host, port });
+    socket.setTimeout(timeoutMs);
+
+    socket.on('connect', () => {
+      if (completed) return;
+      completed = true;
+      socket.destroy();
+      resolve({
+        success: true,
+        durationMs: Date.now() - startTime
+      });
+    });
+
+    socket.on('timeout', () => {
+      if (completed) return;
+      completed = true;
+      socket.destroy();
+      resolve({
+        success: false,
+        durationMs: Date.now() - startTime,
+        error: 'ETIMEDOUT',
+        timeoutReason: `TCP connection timed out after ${timeoutMs}ms`
+      });
+    });
+
+    socket.on('error', (err: any) => {
+      if (completed) return;
+      completed = true;
+      socket.destroy();
+      resolve({
+        success: false,
+        durationMs: Date.now() - startTime,
+        error: err.code || err.message || 'Unknown Error',
+        timeoutReason: err.message || 'Connection error occurred'
+      });
+    });
+  });
+};
+
+// 🌐 NETWORK DIAGNOSTICS: OUTBOUND SMTP PORT VERIFICATION
+app.get('/api/network-test', async (req, res) => {
+  console.log('[ROYMEN Diagnostics] GET /api/network-test requested');
+  const targetHost = 'smtp.gmail.com';
+  
+  // 1. Resolve DNS
+  const dnsResult = await performDnsLookup(targetHost);
+
+  // 2. Test TCP ports
+  const port465Result = await testTcpConnection(targetHost, 465, 10000);
+  const port587Result = await testTcpConnection(targetHost, 587, 10000);
+
+  // 3. Clear explanation summary
+  let summary = '';
+  if (port465Result.success || port587Result.success) {
+    summary = `SUCCESS: Outbound TCP connectivity to ${targetHost} is successful. `;
+    if (port465Result.success && port587Result.success) {
+      summary += 'Both SSL (465) and STARTTLS (587) are reachable.';
+    } else if (port465Result.success) {
+      summary += 'SSL (465) is reachable, but STARTTLS (587) is not.';
+    } else {
+      summary += 'STARTTLS (587) is reachable, but SSL (465) is not.';
+    }
+  } else {
+    summary = `CRITICAL FAILURE: The Railway runtime cannot reach Gmail SMTP (${targetHost}) on standard ports. ` +
+              `Both port 465 (duration: ${port465Result.durationMs}ms, error: ${port465Result.error}) ` +
+              `and port 587 (duration: ${port587Result.durationMs}ms, error: ${port587Result.error}) failed to connect. ` +
+              `This indicates outbound connection blockages (egress traffic restrictions) from your platform/firewall.`;
+  }
+
+  return res.json({
+    success: port465Result.success || port587Result.success,
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'production',
+    summary,
+    dns: {
+      host: targetHost,
+      ipv4: dnsResult.ipv4,
+      ipv6: dnsResult.ipv6,
+      error: dnsResult.error
+    },
+    tests: {
+      port_465: {
+        host: targetHost,
+        port: 465,
+        ...port465Result
+      },
+      port_587: {
+        host: targetHost,
+        port: 587,
+        ...port587Result
+      }
+    }
+  });
 });
 
 // ------------------------------------------------------------------
