@@ -65,14 +65,33 @@ export async function verifySmtpConnection(): Promise<{ success: boolean; error?
   try {
     const activeTransporter = getTransporter();
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+      const missingErr = new Error('EMAIL_USER or EMAIL_PASS environment variable is missing.');
+      console.error('[ROYMEN SMTP Pre-Verification] Failed: Credentials not configured.');
       return { 
         success: false, 
-        error: new Error('EMAIL_USER or EMAIL_PASS environment variable is missing.') 
+        error: missingErr
       };
     }
+    console.log('[ROYMEN SMTP Pre-Verification] Executing transporter.verify()...');
     await activeTransporter.verify();
+    console.log('[ROYMEN SMTP Pre-Verification] SMTP connection verified successfully (transporter.verify() passed).');
     return { success: true };
   } catch (error: any) {
+    console.error('[ROYMEN SMTP Pre-Verification] Failed with error:', error.message || error);
+    if (error) {
+      console.error('=================== DETAILED SMTP VERIFY EXCEPTION ===================');
+      console.error(`- ERROR MESSAGE:  ${error.message || 'N/A'}`);
+      console.error(`- SMTP CODE:      ${error.code || 'N/A'}`);
+      console.error(`- COMMAND:        ${error.command || 'N/A'}`);
+      console.error(`- RESPONSE:       ${error.response || 'N/A'}`);
+      console.error(`- RESPONSE CODE:  ${error.responseCode || 'N/A'}`);
+      console.error(`- ERRNO:          ${error.errno || 'N/A'}`);
+      console.error(`- SYSCALL:        ${error.syscall || 'N/A'}`);
+      console.error(`- ADDRESS:        ${error.address || 'N/A'}`);
+      console.error(`- PORT:           ${error.port || 'N/A'}`);
+      console.error(`- STACKTRACE:\n${error.stack || 'N/A'}`);
+      console.error('======================================================================');
+    }
     return { success: false, error };
   }
 }
@@ -81,7 +100,7 @@ export async function verifySmtpConnection(): Promise<{ success: boolean; error?
  * Reusable core function to dispatch an email.
  * Always handles errors gracefully to avoid breaking checkout or auth flows.
  */
-export async function sendEmail(to: string, subject: string, html: string): Promise<boolean> {
+export async function sendEmail(to: string, subject: string, html: string, throwOnError?: boolean): Promise<boolean> {
   const from = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'ROY MEN <noreply@roymen.com>';
   try {
     const activeTransporter = getTransporter();
@@ -114,7 +133,7 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
   } catch (error: any) {
     console.error(`[ROYMEN Email Error] Failed sending email to ${to}:`, error.message || error);
     
-    // 11. Improve error logging to display: code, command, response, responseCode, errno, syscall, stack
+    // 11. Improve error logging to display: message, code, command, response, responseCode, errno, syscall, address, port, stack
     if (error) {
       console.error('=================== DETAILED SMTP DIAGNOSTIC EXCEPTION ===================');
       console.error(`- ERROR MESSAGE:  ${error.message || 'N/A'}`);
@@ -124,8 +143,14 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
       console.error(`- RESPONSE CODE:  ${error.responseCode || 'N/A'}`);
       console.error(`- ERRNO:          ${error.errno || 'N/A'}`);
       console.error(`- SYSCALL:        ${error.syscall || 'N/A'}`);
+      console.error(`- ADDRESS:        ${error.address || 'N/A'}`);
+      console.error(`- PORT:           ${error.port || 'N/A'}`);
       console.error(`- STACKTRACE:\n${error.stack || 'N/A'}`);
       console.error('==========================================================================');
+    }
+    
+    if (throwOnError) {
+      throw error;
     }
     return false;
   }

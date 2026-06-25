@@ -1998,12 +1998,31 @@ app.get('/api/test-email', async (req, res) => {
   `;
 
   console.log(`[ROYMEN TestEmail] Triggering test email to: ${recipient}...`);
-  const success = await sendEmail(recipient, 'Test Connection: Verified Active | ROY MEN', testHtml);
-
-  if (success) {
-    res.json({ status: 'success', message: `Test connection successfully routed. Inspect inbox of ${recipient}` });
-  } else {
-    res.status(500).json({ status: 'error', message: 'Failed to route SMTP mail. Inspect server terminal logs for detailed stacktrace.' });
+  try {
+    const success = await sendEmail(recipient, 'Test Connection: Verified Active | ROY MEN', testHtml, true);
+    if (success) {
+      return res.json({ status: 'success', message: `Test connection successfully routed. Inspect inbox of ${recipient}` });
+    } else {
+      return res.status(500).json({ status: 'error', message: 'Failed to route SMTP mail. Inspect server terminal logs for detailed stacktrace.' });
+    }
+  } catch (error: any) {
+    const isProduction = process.env.NODE_ENV === 'production';
+    return res.status(500).json({
+      status: 'error',
+      message: 'Failed to route SMTP mail. Inspect server terminal logs for detailed stacktrace.',
+      error: !isProduction ? {
+        message: error.message || 'Unknown SMTP Error',
+        code: error.code || 'N/A',
+        command: error.command || 'N/A',
+        response: error.response || 'N/A',
+        responseCode: error.responseCode || 'N/A',
+        errno: error.errno || 'N/A',
+        syscall: error.syscall || 'N/A',
+        address: error.address || 'N/A',
+        port: error.port || 'N/A',
+        stack: error.stack || 'N/A'
+      } : undefined
+    });
   }
 });
 
