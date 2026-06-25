@@ -17,7 +17,8 @@ import {
   getCustomerOrderConfirmationTemplate, 
   getAdminOrderNotificationTemplate, 
   getOrderStatusTransitionTemplate,
-  verifySmtpConnection
+  verifySmtpConnection,
+  getTransporter
 } from './src/services/email.service';
 
 // ------------------------------------------------------------------
@@ -1946,50 +1947,51 @@ app.get('/api/test-smtp', async (req, res) => {
 
 // ⚠️ SYSTEM HEALTH: TEST SMTP EMAIL ROUTING FUNCTIONALITY
 app.get('/api/test-email', async (req, res) => {
-  const recipient = (req.query.to as string) || process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
-  if (!recipient) {
-    return res.status(400).json({ message: 'No recipient provided. Set "to" query parameter or configure EMAIL_USER/ADMIN_EMAIL in env.' });
-  }
+  console.log('[ROYMEN TestEmail] GET /api/test-email request received');
+  const recipient = (req.query.to as string) || process.env.ADMIN_EMAIL || process.env.EMAIL_USER || 'mrinal2192@gmail.com';
 
-  // Pre-verify connection to give exact verification details immediately if failed
-  console.log('[ROYMEN TestEmail] Running transporter.verify() check before attempting to send...');
-  const smtpVerify = await verifySmtpConnection();
-  if (!smtpVerify.success) {
-    const verifyErr = smtpVerify.error || {};
-    console.error('[ROYMEN TestEmail] SMTP pre-verification failed (transporter.verify() failed). Email dispatch halted.');
-    console.error(verifyErr); // Log complete error object
-    if (verifyErr) {
-      console.error(`- error.message:      ${verifyErr.message || 'N/A'}`);
-      console.error(`- error.code:         ${verifyErr.code || 'N/A'}`);
-      console.error(`- error.command:      ${verifyErr.command || 'N/A'}`);
-      console.error(`- error.response:     ${verifyErr.response || 'N/A'}`);
-      console.error(`- error.responseCode: ${verifyErr.responseCode || 'N/A'}`);
-      console.error(`- error.errno:        ${verifyErr.errno || 'N/A'}`);
-      console.error(`- error.syscall:      ${verifyErr.syscall || 'N/A'}`);
-      console.error(`- error.address:      ${verifyErr.address || 'N/A'}`);
-      console.error(`- error.port:         ${verifyErr.port || 'N/A'}`);
-      console.error(`- error.stack:        ${verifyErr.stack || 'N/A'}`);
-    }
-    
-    return res.status(500).json({
-      status: 'error',
-      message: 'SMTP pre-verification failed (transporter.verify() failed). Email dispatch halted.',
-      error: {
-        message: verifyErr.message || 'SMTP Pre-Verification Failed',
-        code: verifyErr.code || 'N/A',
-        command: verifyErr.command || 'N/A',
-        response: verifyErr.response || 'N/A',
-        responseCode: verifyErr.responseCode || 'N/A',
-        errno: verifyErr.errno || 'N/A',
-        syscall: verifyErr.syscall || 'N/A',
-        address: verifyErr.address || 'N/A',
-        port: verifyErr.port || 'N/A',
-        stack: verifyErr.stack || 'N/A'
+  try {
+    // 1. Create the Nodemailer transporter.
+    const transporter = getTransporter();
+
+    // 2. Call transporter.verify()
+    console.log('[ROYMEN TestEmail] Running transporter.verify()...');
+    try {
+      const verifyResult = await transporter.verify();
+      // 3. Log the complete verify response.
+      console.log('[ROYMEN TestEmail] transporter.verify() success. Response:', verifyResult);
+    } catch (verifyError: any) {
+      console.error('[ROYMEN TestEmail] transporter.verify() failed:', verifyError);
+      if (verifyError) {
+        console.error(`- error.message:      ${verifyError.message || 'N/A'}`);
+        console.error(`- error.code:         ${verifyError.code || 'N/A'}`);
+        console.error(`- error.command:      ${verifyError.command || 'N/A'}`);
+        console.error(`- error.response:     ${verifyError.response || 'N/A'}`);
+        console.error(`- error.responseCode: ${verifyError.responseCode || 'N/A'}`);
+        console.error(`- error.errno:        ${verifyError.errno || 'N/A'}`);
+        console.error(`- error.syscall:      ${verifyError.syscall || 'N/A'}`);
+        console.error(`- error.address:      ${verifyError.address || 'N/A'}`);
+        console.error(`- error.port:         ${verifyError.port || 'N/A'}`);
+        console.error(`- error.stack:        ${verifyError.stack || 'N/A'}`);
       }
-    });
-  }
 
-  const testHtml = `
+      return res.status(500).json({
+        success: false,
+        error: verifyError.message || 'SMTP Verification Failed',
+        code: verifyError.code || 'N/A',
+        command: verifyError.command || 'N/A',
+        response: verifyError.response || 'N/A',
+        responseCode: verifyError.responseCode || 'N/A',
+        errno: verifyError.errno || 'N/A',
+        syscall: verifyError.syscall || 'N/A',
+        address: verifyError.address || 'N/A',
+        port: verifyError.port || 'N/A',
+        stack: verifyError.stack || 'N/A'
+      });
+    }
+
+    // 4. Send a test email to ADMIN_EMAIL.
+    const testHtml = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -1999,10 +2001,9 @@ app.get('/api/test-email', async (req, res) => {
     .card { max-width: 500px; margin: 0 auto; background: #fff; border: 1px solid #eaeaea; border-radius: 4px; padding: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
     .header { text-align: center; border-bottom: 2px solid #d4af37; padding-bottom: 20px; margin-bottom: 20px; }
     .logo { font-size: 24px; font-weight: 900; letter-spacing: 0.2em; font-family: serif; }
-    .meta-table { w-full border-collapse: collapse; margin-top: 15px; font-size: 11px; }
+    .meta-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 11px; }
     .meta-table td { padding: 6px 0; border-bottom: 1px solid #f5f5f5; }
     .label { font-weight: bold; color: #71717a; width: 140px; text-transform: uppercase; letter-spacing: 0.05em; }
-    .btn { display: inline-block; background: #000; color: #fff !important; text-decoration: none; padding: 12px 25px; font-weight: bold; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; border-radius: 2px; margin: 20px 0; }
   </style>
 </head>
 <body>
@@ -2011,22 +2012,21 @@ app.get('/api/test-email', async (req, res) => {
       <div class="logo">ROY MEN</div>
       <div style="font-size: 8px; letter-spacing: 0.3em; text-transform: uppercase; color: #71717a; margin-top: 5px;">WEAR CONFIDENCE</div>
     </div>
-    <h3 style="margin-top:0; font-family:serif; font-weight:normal; letter-spacing:0.02em;">SYSTEM ROUTING DIAGNOSTICS</h3>
-    <p>This is a high-performance verification payload dispatched from the <strong>ROY MEN</strong> e-commerce application backend.</p>
-    <p>If you are reading this email, your Nodemailer integration and Gmail SMTP configurations are 100% correct, verified, and active.</p>
+    <h3 style="margin-top:0; font-family:serif; font-weight:normal; letter-spacing:0.02em;">ROY MEN Gmail SMTP Test</h3>
+    <p>ROY MEN Email System is working successfully.</p>
     
-    <table class="meta-table" style="width: 100%;">
+    <table class="meta-table">
       <tr>
-        <td class="label">Fulfillment Status:</td>
-        <td><span style="background-color: #d4af37; color: #000; padding: 3px 8px; font-size: 9px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em;">ACTIVE</span></td>
+        <td class="label">SMTP Provider:</td>
+        <td>Gmail</td>
       </tr>
       <tr>
-        <td class="label">Timestamp Code:</td>
-        <td style="font-family: monospace; font-size: 12px;">${new Date().toISOString()}</td>
+        <td class="label">Current Server Time:</td>
+        <td style="font-family: monospace; font-size: 11px;">${new Date().toString()} (${new Date().toISOString()})</td>
       </tr>
       <tr>
-        <td class="label">Transport Engine:</td>
-        <td>Nodemailer (Direct Gmail Secure Pool)</td>
+        <td class="label">Environment:</td>
+        <td>${process.env.NODE_ENV || 'development'}</td>
       </tr>
     </table>
     
@@ -2035,16 +2035,29 @@ app.get('/api/test-email', async (req, res) => {
   </div>
  </body>
 </html>
-  `;
+    `;
 
-  console.log(`[ROYMEN TestEmail] Triggering test email to: ${recipient}...`);
-  try {
-    const success = await sendEmail(recipient, 'Test Connection: Verified Active | ROY MEN', testHtml, true);
-    if (success) {
-      return res.json({ status: 'success', message: `Test connection successfully routed. Inspect inbox of ${recipient}` });
-    } else {
-      return res.status(500).json({ status: 'error', message: 'Failed to route SMTP mail. Inspect server terminal logs for detailed stacktrace.' });
-    }
+    const from = process.env.EMAIL_FROM || process.env.EMAIL_USER || 'ROY MEN <noreply@roymen.com>';
+    console.log(`[ROYMEN TestEmail] Dispatching test email to: ${recipient}...`);
+
+    const info = await transporter.sendMail({
+      from,
+      to: recipient,
+      subject: 'ROY MEN Gmail SMTP Test',
+      html: testHtml
+    });
+
+    console.log('[ROYMEN TestEmail] SendMail completed successfully. info:', info);
+
+    // 5. Success response
+    return res.json({
+      success: true,
+      message: "Test email sent successfully.",
+      messageId: info.messageId,
+      accepted: info.accepted,
+      response: info.response
+    });
+
   } catch (error: any) {
     console.error('[ROYMEN TestEmail] SMTP route sending failure caught:');
     console.error(error); // Log complete error object
@@ -2061,21 +2074,19 @@ app.get('/api/test-email', async (req, res) => {
       console.error(`- error.stack:        ${error.stack || 'N/A'}`);
     }
     
+    // 5. Failure response
     return res.status(500).json({
-      status: 'error',
-      message: 'Failed to route SMTP mail. Inspect server terminal logs for detailed stacktrace.',
-      error: {
-        message: error.message || 'Unknown SMTP Error',
-        code: error.code || 'N/A',
-        command: error.command || 'N/A',
-        response: error.response || 'N/A',
-        responseCode: error.responseCode || 'N/A',
-        errno: error.errno || 'N/A',
-        syscall: error.syscall || 'N/A',
-        address: error.address || 'N/A',
-        port: error.port || 'N/A',
-        stack: error.stack || 'N/A'
-      }
+      success: false,
+      error: error.message || 'Unknown SMTP Error',
+      code: error.code || 'N/A',
+      command: error.command || 'N/A',
+      response: error.response || 'N/A',
+      responseCode: error.responseCode || 'N/A',
+      errno: error.errno || 'N/A',
+      syscall: error.syscall || 'N/A',
+      address: error.address || 'N/A',
+      port: error.port || 'N/A',
+      stack: error.stack || 'N/A'
     });
   }
 });
