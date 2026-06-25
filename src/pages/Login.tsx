@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { Mail, Lock, LogIn, ArrowRight, ShieldCheck } from 'lucide-react';
+import { RoyMenLogo } from '../components/RoyMenLogo';
 
 export const Login: React.FC = () => {
   const { loginUser, getTranslatedText, addToast, user } = useShop();
@@ -34,16 +35,19 @@ export const Login: React.FC = () => {
         {/* Aesthetic premium gold trim accent */}
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-yellow-500"></div>
 
-        <div className="text-center space-y-2">
-          <span className="text-[10px] font-bold tracking-[0.43em] text-yellow-600 dark:text-yellow-500 uppercase">
-            {getTranslatedText("SARTORIAL RETREAT", "আভিজাত্যের আঙিনা")}
-          </span>
-          <h1 className="text-3xl font-black uppercase tracking-widest text-black dark:text-white">
-            {getTranslatedText("SIGN IN", "প্রবেশ")}
-          </h1>
-          <p className="text-xs text-zinc-500 leading-relaxed font-semibold">
-            {getTranslatedText("Wear Confidence with ROYMEN Bangladesh.", "রয়মেন কালেকশনে প্রবেশ করে পরিধান করুন আত্মবিশ্বাস।")}
-          </p>
+        <div className="text-center space-y-4">
+          <RoyMenLogo size="md" showTagline={false} className="mx-auto" />
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-bold tracking-[0.43em] text-yellow-600 dark:text-yellow-500 uppercase block">
+              {getTranslatedText("SARTORIAL RETREAT", "আভিজাত্যের আঙিনা")}
+            </span>
+            <h1 className="text-3xl font-black uppercase tracking-widest text-black dark:text-white">
+              {getTranslatedText("SIGN IN", "প্রবেশ")}
+            </h1>
+            <p className="text-xs text-zinc-500 leading-relaxed font-semibold">
+              {getTranslatedText("Wear Confidence with ROYMEN Bangladesh.", "রয়মেন কালেকশনে প্রবেশ করে পরিধান করুন আত্মবিশ্বাস।")}
+            </p>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5 text-xs font-semibold text-zinc-650">
@@ -72,6 +76,12 @@ export const Login: React.FC = () => {
               <label className="text-[10px] uppercase font-bold tracking-wider text-zinc-500 dark:text-zinc-400 block">
                 {getTranslatedText("Password:", "পাসওয়ার্ড:")}
               </label>
+              <Link
+                to="/forgot-password"
+                className="text-[10px] uppercase font-bold tracking-wider text-yellow-600 dark:text-yellow-500 hover:underline"
+              >
+                {getTranslatedText("Forgot?", "ভুলে গেছেন?")}
+              </Link>
             </div>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-400 pointer-events-none">

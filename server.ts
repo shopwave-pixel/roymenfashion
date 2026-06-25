@@ -6,8 +6,18 @@ import { createServer as createViteServer } from 'vite';
 import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto'; // For secure tokens
 import { v2 as cloudinary } from 'cloudinary';
 import { products as localInitialProducts } from './src/data/products';
+import { 
+  sendEmail, 
+  getWelcomeEmailTemplate, 
+  getForgotPasswordEmailTemplate, 
+  getPasswordChangedEmailTemplate, 
+  getCustomerOrderConfirmationTemplate, 
+  getAdminOrderNotificationTemplate, 
+  getOrderStatusTransitionTemplate 
+} from './src/services/email.service';
 
 // ------------------------------------------------------------------
 // ENV & CONSTANTS
@@ -76,7 +86,9 @@ const UserSchema = new mongoose.Schema({
     phone: String,
     address: String,
     district: String
-  }]
+  }],
+  resetPasswordToken: String,
+  resetPasswordExpires: Date
 });
 
 const ProductSchema = new mongoose.Schema({
@@ -138,7 +150,25 @@ const OrderSchema = new mongoose.Schema({
     transactionId: String,
     senderNumber: String,
     paidAmount: Number
-  }
+  },
+  courierName: { type: String, default: "" },
+  trackingNumber: { type: String, default: "" },
+  trackingUrl: { type: String, default: "" },
+  notes: { type: String, default: "" },
+  updatedAt: { type: Date, default: Date.now }
+});
+
+const OrderHistorySchema = new mongoose.Schema({
+  orderId: { type: String, required: true },
+  previousStatus: { type: String, default: "" },
+  newStatus: { type: String, default: "" },
+  previousPaymentStatus: { type: String, default: "" },
+  newPaymentStatus: { type: String, default: "" },
+  trackingNumber: { type: String, default: "" },
+  courier: { type: String, default: "" },
+  notes: { type: String, default: "" },
+  changedBy: { type: String, default: "Google Sheets Admin Control Panel" },
+  changedTime: { type: Date, default: Date.now }
 });
 
 const EmailLogSchema = new mongoose.Schema({
@@ -153,6 +183,7 @@ const UserModel: mongoose.Model<any> = mongoose.models.User || mongoose.model('U
 const ProductModel: mongoose.Model<any> = mongoose.models.Product || mongoose.model('Product', ProductSchema);
 const OrderModel: mongoose.Model<any> = mongoose.models.Order || mongoose.model('Order', OrderSchema);
 const EmailLogModel: mongoose.Model<any> = mongoose.models.EmailLog || mongoose.model('EmailLog', EmailLogSchema);
+const OrderHistoryModel: mongoose.Model<any> = mongoose.models.OrderHistory || mongoose.model('OrderHistory', OrderHistorySchema);
 
 // 2. Local File Database Fallback (JSON Server mode for Offline/Preview)
 const FILE_DB_PATH = path.join(process.cwd(), 'data', 'db.json');
@@ -165,6 +196,7 @@ interface LocalDB {
   products: any[];
   orders: any[];
   emailLogs: any[];
+  orderHistory?: any[];
 }
 
 const loadLocalDB = (): LocalDB => {
@@ -251,7 +283,8 @@ const loadLocalDB = (): LocalDB => {
         body: "Full stack server active and initialized. Render compatibility completed successfully.",
         timestamp: new Date().toISOString()
       }
-    ]
+    ],
+    orderHistory: []
   };
 
   // Hash initial standard credentials for fallback
@@ -419,9 +452,9 @@ const connectDB = async () => {
     } catch (err: any) {
       isMongoConnected = false;
       console.log('==================================================================');
-      console.log('[ROYMEN INFO] MongoDB is currently unavailable or authentication failed.');
-      console.log(`[ROYMEN INFO] Notice: ${err?.message || 'Connection reference failed'}`);
-      console.log('[ROYMEN INFO] Activating dynamic local storage fallback mode (all features are 100% fully functional using local JSON database).');
+      console.log('[ROYMEN INFO] MongoDB status: Sandbox Local Mode Active.');
+      console.log('[ROYMEN INFO] Notice: The application is running on local file-based database fallback.');
+      console.log('[ROYMEN INFO] Note: Check your environment variables and network access if you wish to link Cloud Atlas.');
       console.log('==================================================================');
       loadLocalDB();
     }
@@ -457,6 +490,111 @@ const recordEmailLog = async (to: string, subject: string, body: string) => {
   }
   console.log(`[EMAIL DISPATCH] To: ${to} | Subject: ${subject}`);
 };
+
+// ⚠️ TRIGGER GOOGLE APPS SCRIPT WEBHOOK: SYNC ORDER DATA TO GOOGLE SHEETS
+const triggerGoogleAppsScriptWebhook = async (order: any, ip: string = 'N/A', userAgent: string = 'N/A') => {
+  const url = process.env.GOOGLE_APPS_SCRIPT_URL;
+  if (!url) {
+    console.warn('[ROYMEN Sheets Sync] GOOGLE_APPS_SCRIPT_URL is not configured in environment variables. Google Sheet sync bypassed.');
+    return;
+  }
+
+  try {
+    const payload = {
+      timestamp: new Date().toISOString(),
+      orderId: order.id,
+      orderDate: new Date(order.createdAt).toISOString(),
+      customerName: order.billingDetails.name,
+      phone: order.billingDetails.phone,
+      email: order.billingDetails.email || '',
+      address: order.billingDetails.address,
+      division: order.billingDetails.division || '',
+      district: order.billingDetails.district,
+      postalCode: order.billingDetails.postalCode || '',
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentVerified ? 'Verified' : 'Pending',
+      orderStatus: order.orderStatus,
+      products: order.items.map((it: any) => it.name).join(', '),
+      size: order.items.map((it: any) => it.size || 'Standard').join(', '),
+      color: order.items.map((it: any) => it.color || 'Standard').join(', '),
+      quantity: order.items.reduce((sum: number, it: any) => sum + (it.quantity || 1), 0),
+      unitPrice: order.items.map((it: any) => `৳${it.price}`).join(', '),
+      subtotal: order.subtotal,
+      deliveryCharge: order.deliveryFee,
+      discount: order.discount,
+      grandTotal: order.total,
+      notes: order.billingDetails.notes || '',
+      customerIP: ip,
+      browser: userAgent
+    };
+
+    console.log(`[ROYMEN Sheets Sync] Sending order ${order.id} data to Google Sheets...`);
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const text = await response.text();
+    console.log(`[ROYMEN Sheets Sync Response] Order ${order.id}:`, text);
+  } catch (error: any) {
+    console.error(`[ROYMEN Sheets Sync Error] Failed to send order ${order.id} to Google Sheets:`, error.message || error);
+  }
+};
+
+// ⚠️ TRIGGER EMAIL NOTIFICATIONS: CONFIRMATION TO CUSTOMER & NOTIFICATION TO ADMIN
+const triggerOrderEmailNotifications = async (order: any, ip: string = 'N/A', userAgent: string = 'N/A') => {
+  try {
+    // 1. Email to Customer
+    const customerEmail = order.billingDetails?.email;
+    if (customerEmail && customerEmail.includes('@')) {
+      const customerHtml = getCustomerOrderConfirmationTemplate(order);
+      await sendEmail(
+        customerEmail.trim().toLowerCase(),
+        `Order Confirmed: ${order.id} | ROY MEN`,
+        customerHtml
+      );
+    } else {
+      console.log(`[ROYMEN Email] Customer email is missing or invalid: "${customerEmail}". Skipping customer notification.`);
+    }
+
+    // 2. Email to Admin
+    const adminEmail = process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+    if (adminEmail && adminEmail.includes('@')) {
+      const adminHtml = getAdminOrderNotificationTemplate(order, ip, userAgent);
+      await sendEmail(
+        adminEmail.trim().toLowerCase(),
+        `🔔 [NEW ORDER] ${order.id} - ৳${order.total.toLocaleString()} via ${order.paymentMethod.toUpperCase()}`,
+        adminHtml
+      );
+    } else {
+      console.log('[ROYMEN Email] ADMIN_EMAIL is not configured in env. Skipping administrator notification.');
+    }
+  } catch (err: any) {
+    console.error(`[ROYMEN Email Error] Order email notification failed for ${order.id}:`, err.message || err);
+  }
+};
+
+// ⚠️ TRIGGER STATUS UPDATE EMAIL: NOTIFY CUSTOMER OF ORDER LIFECYCLE TRANSITION
+const triggerOrderStatusEmailUpdate = async (order: any, previousStatus: string, currentStatus: string) => {
+  try {
+    const customerEmail = order.billingDetails?.email;
+    if (customerEmail && customerEmail.includes('@')) {
+      const emailHtml = getOrderStatusTransitionTemplate(order, previousStatus, currentStatus);
+      await sendEmail(
+        customerEmail.trim().toLowerCase(),
+        `Order ${order.id} Status Updated | ROY MEN`,
+        emailHtml
+      );
+      console.log(`[ROYMEN Email] Dispatched order status transition email for order ${order.id}`);
+    }
+  } catch (err: any) {
+    console.error(`[ROYMEN Email Error] Status update email failed for order ${order.id}:`, err.message || err);
+  }
+};
+
 
 // ------------------------------------------------------------------
 // AUTH MIDDLEWARE
@@ -545,7 +683,9 @@ app.post('/api/auth/register', async (req, res) => {
 
       const token = jwt.sign({ id: newUser._id, email: newUser.email, role: newUser.role }, JWT_SECRET, { expiresIn: '7d' });
       
+      const welcomeHtml = getWelcomeEmailTemplate(name);
       await recordEmailLog(cleanEmail, 'Welcome to ROYMEN Fashion', `Hello ${name},\n\nThank you for choosing ROYMEN. Wear Confidence in clothing engineered for excellence.`);
+      await sendEmail(cleanEmail, 'Welcome to ROYMEN Fashion | ROY MEN', welcomeHtml);
 
       res.status(201).json({
         token,
@@ -578,7 +718,9 @@ app.post('/api/auth/register', async (req, res) => {
 
     const token = jwt.sign({ id: newUser.id, email: newUser.email, role: newUser.role }, JWT_SECRET, { expiresIn: '7d' });
     
+    const welcomeHtml = getWelcomeEmailTemplate(name);
     await recordEmailLog(cleanEmail, 'Welcome to ROYMEN Fashion', `Hello ${name},\n\nThank you for choosing ROYMEN. Wear Confidence.`);
+    await sendEmail(cleanEmail, 'Welcome to ROYMEN Fashion | ROY MEN', welcomeHtml);
 
     res.status(201).json({
       token,
@@ -651,6 +793,132 @@ app.post('/api/auth/login', async (req, res) => {
       token,
       user: { id: user.id, name: user.name, email: user.email, role: user.role, addresses: user.addresses || [] }
     });
+  }
+});
+
+// ⚠️ FORGOT PASSWORD: REQUEST SECURE TOKEN
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) {
+    return res.status(400).json({ message: 'Please supply your account email address.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const token = crypto.randomBytes(20).toString('hex');
+  const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+  const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes expiry
+
+  // Standard response to avoid email enumeration
+  const successResponse = { message: 'If your email is registered with us, a secure recovery link has been dispatched.' };
+
+  if (isMongoConnected) {
+    try {
+      const user = await UserModel.findOne({ email: cleanEmail });
+      if (!user) {
+        // Return success response to avoid email enumeration
+        return res.json(successResponse);
+      }
+
+      user.resetPasswordToken = hashedToken;
+      user.resetPasswordExpires = expiry;
+      await user.save();
+
+      const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
+      const resetLink = `${origin}/#/reset-password/${token}`;
+      const emailHtml = getForgotPasswordEmailTemplate(user.name, resetLink);
+
+      await recordEmailLog(cleanEmail, 'Password Reset Link Request', `Password reset token requested. Link: ${resetLink}`);
+      await sendEmail(cleanEmail, 'Secure Account Recovery | ROY MEN', emailHtml);
+
+      res.json(successResponse);
+    } catch (e: any) {
+      console.error('[Forgot Password Error]', e);
+      res.status(500).json({ message: 'Error initiating password reset protocol.' });
+    }
+  } else {
+    const db = loadLocalDB();
+    const userIndex = db.users.findIndex(u => u.email === cleanEmail);
+    if (userIndex === -1) {
+      return res.json(successResponse);
+    }
+
+    db.users[userIndex].resetPasswordToken = hashedToken;
+    db.users[userIndex].resetPasswordExpires = expiry.toISOString();
+    saveLocalDB(db);
+
+    const origin = req.headers.origin || process.env.APP_URL || 'http://localhost:3000';
+    const resetLink = `${origin}/#/reset-password/${token}`;
+    const emailHtml = getForgotPasswordEmailTemplate(db.users[userIndex].name, resetLink);
+
+    await recordEmailLog(cleanEmail, 'Password Reset Link Request', `Password reset token requested (Sandbox). Link: ${resetLink}`);
+    await sendEmail(cleanEmail, 'Secure Account Recovery | ROY MEN', emailHtml);
+
+    res.json(successResponse);
+  }
+});
+
+// ⚠️ RESET PASSWORD: APPLY NEW CREDENTIALS
+app.post('/api/auth/reset-password', async (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) {
+    return res.status(400).json({ message: 'Authentication token and new password are required.' });
+  }
+
+  const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
+  if (isMongoConnected) {
+    try {
+      const user = await UserModel.findOne({
+        resetPasswordToken: hashedToken,
+        resetPasswordExpires: { $gt: new Date() }
+      });
+
+      if (!user) {
+        return res.status(400).json({ message: 'The recovery link is invalid or has expired. Please request a new link.' });
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(password, salt);
+
+      user.password = hashedPassword;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+      await user.save();
+
+      const changedHtml = getPasswordChangedEmailTemplate(user.name);
+      await recordEmailLog(user.email, 'Password Reset Success', 'Your account password has been successfully reset.');
+      await sendEmail(user.email, 'Security Update: Password Revised | ROY MEN', changedHtml);
+
+      res.json({ message: 'Your password has been successfully updated.' });
+    } catch (e: any) {
+      console.error('[Reset Password Error]', e);
+      res.status(500).json({ message: 'Error resetting your account password.' });
+    }
+  } else {
+    const db = loadLocalDB();
+    const userIndex = db.users.findIndex(u => 
+      u.resetPasswordToken === hashedToken && 
+      new Date(u.resetPasswordExpires) > new Date()
+    );
+
+    if (userIndex === -1) {
+      return res.status(400).json({ message: 'The recovery link is invalid or has expired. Please request a new link.' });
+    }
+
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(password, salt);
+
+    db.users[userIndex].password = hashedPassword;
+    db.users[userIndex].resetPasswordToken = undefined;
+    db.users[userIndex].resetPasswordExpires = undefined;
+    saveLocalDB(db);
+
+    const user = db.users[userIndex];
+    const changedHtml = getPasswordChangedEmailTemplate(user.name);
+    await recordEmailLog(user.email, 'Password Reset Success', 'Your account password has been successfully reset.');
+    await sendEmail(user.email, 'Security Update: Password Revised | ROY MEN', changedHtml);
+
+    res.json({ message: 'Your password has been successfully updated.' });
   }
 });
 
@@ -983,6 +1251,11 @@ app.post('/api/orders', async (req, res) => {
         `Hi ${billingDetails.name}, your premium fit purchase ${generatedOrderId} sum BDT ${total} has been registered.`
       );
 
+      // Trigger background integrations (Google Sheets & Gmail SMTP)
+      // Done in background so failure never blocks or rolls back successful Mongo checkout
+      triggerGoogleAppsScriptWebhook(placement, req.ip, req.headers['user-agent'] || 'N/A').catch(e => console.error(e));
+      triggerOrderEmailNotifications(placement, req.ip, req.headers['user-agent'] || 'N/A').catch(e => console.error(e));
+
       res.status(201).json(savedDoc);
     } catch (err) {
       res.status(500).json({ message: 'Error writing transaction logs to database.' });
@@ -997,6 +1270,10 @@ app.post('/api/orders', async (req, res) => {
       `ROYMEN Order confirmation: ${generatedOrderId}`,
       `Hi ${billingDetails.name}, your premium fit purchase ${generatedOrderId} of BDT ${total} is registered.`
     );
+
+    // Trigger background integrations for Sandbox database too
+    triggerGoogleAppsScriptWebhook(placement, req.ip, req.headers['user-agent'] || 'N/A').catch(e => console.error(e));
+    triggerOrderEmailNotifications(placement, req.ip, req.headers['user-agent'] || 'N/A').catch(e => console.error(e));
 
     res.status(201).json(placement);
   }
@@ -1130,6 +1407,7 @@ app.post('/api/orders/:id/verify-payment', authenticateToken, adminOnly, async (
       const order = await OrderModel.findOne({ id: orderId });
       if (!order) return res.status(404).json({ message: 'Order file absent.' });
 
+      const previousStatus = 'payment_auditing';
       order.paymentVerified = !!approve;
       order.orderStatus = approve ? 'processing' : 'payment_rejected';
 
@@ -1144,6 +1422,9 @@ app.post('/api/orders/:id/verify-payment', authenticateToken, adminOnly, async (
           : `We reviewed the deposit codes for order ${orderId} and could not authenticate the Transaction ID. Please contact support.`
       );
 
+      // Trigger real status update email notification
+      triggerOrderStatusEmailUpdate(order, previousStatus, order.orderStatus).catch(e => console.error(e));
+
       res.json(order);
     } catch (err) {
       res.status(500).json({ message: 'Verification transaction exception.' });
@@ -1153,6 +1434,7 @@ app.post('/api/orders/:id/verify-payment', authenticateToken, adminOnly, async (
     const idx = db.orders.findIndex(o => o.id === orderId);
     if (idx === -1) return res.status(404).json({ message: 'Order file absent.' });
 
+    const previousStatus = db.orders[idx].orderStatus || 'payment_auditing';
     db.orders[idx].paymentVerified = !!approve;
     db.orders[idx].orderStatus = approve ? 'processing' : 'payment_rejected';
     saveLocalDB(db);
@@ -1165,6 +1447,9 @@ app.post('/api/orders/:id/verify-payment', authenticateToken, adminOnly, async (
         ? `Your payment of BDT ${db.orders[idx].total} is approved! preparing package.`
         : `Transaction audit matching failed. contact care.`
     );
+
+    // Trigger real status update email notification
+    triggerOrderStatusEmailUpdate(db.orders[idx], previousStatus, db.orders[idx].orderStatus).catch(e => console.error(e));
 
     res.json(db.orders[idx]);
   }
@@ -1182,6 +1467,7 @@ app.put('/api/orders/:id/status', authenticateToken, adminOnly, async (req, res)
       const order = await OrderModel.findOne({ id: orderId });
       if (!order) return res.status(404).json({ message: 'Ref absent.' });
 
+      const previousStatus = order.orderStatus;
       order.orderStatus = orderStatus;
       if (orderStatus === 'shipped') {
         order.timeline = 'Shipped via Courier';
@@ -1198,6 +1484,9 @@ app.put('/api/orders/:id/status', authenticateToken, adminOnly, async (req, res)
         `Hi! Package ${orderId} state transitioned to: ${orderStatus}. Ready wardrobe hangers.`
       );
 
+      // Trigger real status update email notification
+      triggerOrderStatusEmailUpdate(order, previousStatus, orderStatus).catch(e => console.error(e));
+
       res.json(order);
     } catch (e) {
       res.status(500).json({ message: 'Error rewriting shipping lifecycle.' });
@@ -1207,6 +1496,7 @@ app.put('/api/orders/:id/status', authenticateToken, adminOnly, async (req, res)
     const idx = db.orders.findIndex(o => o.id === orderId);
     if (idx === -1) return res.status(404).json({ message: 'Ref absent.' });
 
+    const previousStatus = db.orders[idx].orderStatus;
     db.orders[idx].orderStatus = orderStatus;
     if (orderStatus === 'shipped') {
       db.orders[idx].timeline = 'Shipped via Courier';
@@ -1221,7 +1511,142 @@ app.put('/api/orders/:id/status', authenticateToken, adminOnly, async (req, res)
       `Fitting ${orderId} transition value: ${orderStatus}.`
     );
 
+    // Trigger real status update email notification
+    triggerOrderStatusEmailUpdate(db.orders[idx], previousStatus, orderStatus).catch(e => console.error(e));
+
     res.json(db.orders[idx]);
+  }
+});
+
+// ⚠️ TWO-WAY SYNC WEBHOOK (GOOGLE SHEETS ADMIN CHANGE TRANSITION)
+app.post('/api/orders/sync-status', async (req, res) => {
+  const apiKey = process.env.API_KEY || 'ROY_MEN_SECURE_API_KEY_2026';
+  const providedKey = req.headers['x-api-key'];
+
+  if (!providedKey || providedKey !== apiKey) {
+    console.warn('[ROYMEN Sync] Unauthorized webhook request matching failure.');
+    return res.status(401).json({ success: false, error: 'Unauthorized key mismatch.' });
+  }
+
+  const { orderId, orderStatus, paymentStatus, trackingNumber, trackingUrl, courierName, notes, updatedAt } = req.body;
+
+  if (!orderId) {
+    return res.status(400).json({ success: false, error: 'orderId is a required parameter.' });
+  }
+
+  try {
+    let order: any = null;
+    let previousStatus = '';
+    let previousPaymentStatus = '';
+
+    if (isMongoConnected) {
+      order = await OrderModel.findOne({ id: orderId });
+      if (!order) {
+        return res.status(404).json({ success: false, error: `Order with ID ${orderId} not found.` });
+      }
+
+      previousStatus = order.orderStatus || 'Pending';
+      previousPaymentStatus = order.paymentVerified ? 'Paid' : 'Pending';
+
+      if (paymentStatus) {
+        order.paymentVerified = (paymentStatus === 'Paid');
+      }
+
+      if (orderStatus) {
+        order.orderStatus = orderStatus;
+        if (orderStatus.toLowerCase() === 'shipped') {
+          order.timeline = 'Shipped via Courier';
+        } else if (orderStatus.toLowerCase() === 'delivered') {
+          order.timeline = 'Delivered';
+        } else {
+          order.timeline = orderStatus;
+        }
+      }
+
+      if (courierName !== undefined) order.courierName = courierName;
+      if (trackingNumber !== undefined) order.trackingNumber = trackingNumber;
+      if (trackingUrl !== undefined) order.trackingUrl = trackingUrl;
+      if (notes !== undefined) order.notes = notes;
+      order.updatedAt = updatedAt ? new Date(updatedAt) : new Date();
+
+      await order.save();
+
+      // Create MongoDB Order History Audit Log entry
+      await OrderHistoryModel.create({
+        orderId,
+        previousStatus,
+        newStatus: orderStatus || order.orderStatus,
+        previousPaymentStatus,
+        newPaymentStatus: paymentStatus || (order.paymentVerified ? 'Paid' : 'Pending'),
+        trackingNumber: trackingNumber || order.trackingNumber,
+        courier: courierName || order.courierName,
+        notes: notes || order.notes,
+        changedBy: 'Google Sheets Admin Control Panel',
+        changedTime: new Date()
+      });
+
+    } else {
+      // Fallback Mode (Local File DB)
+      const db = loadLocalDB();
+      const orderIdx = db.orders.findIndex(o => o.id === orderId);
+      if (orderIdx === -1) {
+        return res.status(404).json({ success: false, error: `Order with ID ${orderId} not found in fallback DB.` });
+      }
+
+      order = db.orders[orderIdx];
+      previousStatus = order.orderStatus || 'Pending';
+      previousPaymentStatus = order.paymentVerified ? 'Paid' : 'Pending';
+
+      if (paymentStatus) {
+        order.paymentVerified = (paymentStatus === 'Paid');
+      }
+
+      if (orderStatus) {
+        order.orderStatus = orderStatus;
+        if (orderStatus.toLowerCase() === 'shipped') {
+          order.timeline = 'Shipped via Courier';
+        } else if (orderStatus.toLowerCase() === 'delivered') {
+          order.timeline = 'Delivered';
+        } else {
+          order.timeline = orderStatus;
+        }
+      }
+
+      if (courierName !== undefined) order.courierName = courierName;
+      if (trackingNumber !== undefined) order.trackingNumber = trackingNumber;
+      if (trackingUrl !== undefined) order.trackingUrl = trackingUrl;
+      if (notes !== undefined) order.notes = notes;
+      order.updatedAt = updatedAt ? new Date(updatedAt) : new Date().toISOString();
+
+      db.orders[orderIdx] = order;
+
+      if (!db.orderHistory) db.orderHistory = [];
+      db.orderHistory.push({
+        orderId,
+        previousStatus,
+        newStatus: orderStatus || order.orderStatus,
+        previousPaymentStatus,
+        newPaymentStatus: paymentStatus || (order.paymentVerified ? 'Paid' : 'Pending'),
+        trackingNumber: trackingNumber || order.trackingNumber,
+        courier: courierName || order.courierName,
+        notes: notes || order.notes,
+        changedBy: 'Google Sheets Admin Control Panel (Sandbox)',
+        changedTime: new Date().toISOString()
+      });
+
+      saveLocalDB(db);
+    }
+
+    // Trigger customer status email transition automation if status has changed!
+    if (orderStatus && orderStatus !== previousStatus) {
+      console.log(`[ROYMEN Sync Email] Order status changed from ${previousStatus} to ${orderStatus}. Routing notification email.`);
+      await triggerOrderStatusEmailUpdate(order, previousStatus, orderStatus).catch(e => console.error(e));
+    }
+
+    return res.status(200).json({ success: true });
+  } catch (err: any) {
+    console.error('[ROYMEN Sync Error] Failed to update order status via sheet sync webhook:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Internal server error.' });
   }
 });
 
@@ -1323,6 +1748,235 @@ app.get('/api/admin/emails', authenticateToken, adminOnly, async (req, res) => {
   } else {
     const db = loadLocalDB();
     res.json(db.emailLogs);
+  }
+});
+
+// ⚠️ ADMIN: RETRIEVE ALL CUSTOMERS AND ORDER STATISTICS
+app.get('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
+  if (isMongoConnected) {
+    try {
+      const users = await UserModel.find({ role: 'customer' }).select('-password');
+      const orders = await OrderModel.find({});
+      
+      const usersWithOrders = users.map(user => {
+        const userOrders = orders.filter(o => o.userId && o.userId.toString() === user._id.toString());
+        return {
+          id: user._id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          addresses: user.addresses || [],
+          orderCount: userOrders.length,
+          totalSpent: userOrders.reduce((sum, o) => sum + (o.orderStatus === 'delivered' ? o.total : 0), 0)
+        };
+      });
+      res.json(usersWithOrders);
+    } catch (e) {
+      res.status(500).json({ message: 'Error fetching customer ledger.' });
+    }
+  } else {
+    const db = loadLocalDB();
+    const usersWithOrders = db.users.filter(u => u.role === 'customer').map(user => {
+      const userOrders = db.orders.filter(o => o.userId === user.id);
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        addresses: user.addresses || [],
+        orderCount: userOrders.length,
+        totalSpent: userOrders.reduce((sum: number, o: any) => sum + (o.orderStatus === 'delivered' ? o.total : 0), 0)
+      };
+    });
+    res.json(usersWithOrders);
+  }
+});
+
+// ⚠️ ADMIN: RESET USER PASSWORD & NOTIFY CUSTOMER
+app.post('/api/admin/users/:id/reset-password', authenticateToken, adminOnly, async (req, res) => {
+  const userId = req.params.id;
+  const { newPassword } = req.body;
+
+  if (!newPassword || newPassword.trim().length < 4) {
+    return res.status(400).json({ message: 'Please supply a password with at least 4 characters.' });
+  }
+
+  if (isMongoConnected) {
+    try {
+      const user = await UserModel.findById(userId);
+      if (!user) {
+        return res.status(404).json({ message: 'Customer profile was not found.' });
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+      user.password = hashedPassword;
+      await user.save();
+
+      const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: sans-serif; background-color: #fafafa; color: #1a1a1a; padding: 20px; }
+    .card { max-width: 500px; margin: 0 auto; background: #fff; border: 1px solid #eaeaea; border-radius: 4px; padding: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+    .header { text-align: center; border-bottom: 2px solid #d4af37; padding-bottom: 20px; margin-bottom: 20px; }
+    .logo { font-size: 24px; font-weight: 900; letter-spacing: 0.2em; font-family: serif; }
+    .btn { display: inline-block; background: #000; color: #fff !important; text-decoration: none; padding: 12px 25px; font-weight: bold; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; border-radius: 2px; margin: 20px 0; }
+    .credentials { background: #f5f5f5; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 16px; font-weight: bold; text-align: center; letter-spacing: 0.05em; color: #c5a059; border: 1px dashed #d4af37; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="logo">ROY MEN</div>
+      <div style="font-size: 8px; letter-spacing: 0.3em; text-transform: uppercase; color: #71717a; margin-top: 5px;">WEAR CONFIDENCE</div>
+    </div>
+    <h3 style="margin-top:0; font-family:serif; font-weight:normal;">ADMINISTRATIVE SECURITY OVERRIDE</h3>
+    <p>Dear ${user.name},</p>
+    <p>Please be advised that an administrator has reset your account password credentials for the <strong>ROY MEN</strong> online portal.</p>
+    <p>Your temporary credentials are provided below:</p>
+    <div class="credentials">${newPassword}</div>
+    <p>For security, please log in immediately using the link below and change your password in your user settings dashboard.</p>
+    <div style="text-align: center;">
+      <a href="${process.env.APP_URL || 'https://roymen.com'}/#/login" class="btn">Login & Update Password</a>
+    </div>
+    <hr style="border:none; border-top:1px solid #eaeaea; margin: 20px 0;" />
+    <p style="font-size:10px; color:#71717a; text-align:center; margin:0;">© ${new Date().getFullYear()} ROY MEN Bangladesh. All Rights Reserved.</p>
+  </div>
+</body>
+</html>
+      `;
+
+      await recordEmailLog(user.email, 'Administrative Password Reset', 'An administrator administratively reset your account password.');
+      await sendEmail(user.email, 'Security Alert: Password Administratively Reset | ROY MEN', emailHtml);
+
+      res.json({ message: `Successfully reset password for customer ${user.name}. Email dispatched.` });
+    } catch (e: any) {
+      res.status(500).json({ message: 'Error resetting password on server.' });
+    }
+  } else {
+    const db = loadLocalDB();
+    const idx = db.users.findIndex(u => u.id === userId);
+    if (idx === -1) {
+      return res.status(404).json({ message: 'Customer profile was not found.' });
+    }
+
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(newPassword, salt);
+
+    db.users[idx].password = hashedPassword;
+    saveLocalDB(db);
+
+    const user = db.users[idx];
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: sans-serif; background-color: #fafafa; color: #1a1a1a; padding: 20px; }
+    .card { max-width: 500px; margin: 0 auto; background: #fff; border: 1px solid #eaeaea; border-radius: 4px; padding: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+    .header { text-align: center; border-bottom: 2px solid #d4af37; padding-bottom: 20px; margin-bottom: 20px; }
+    .logo { font-size: 24px; font-weight: 900; letter-spacing: 0.2em; font-family: serif; }
+    .btn { display: inline-block; background: #000; color: #fff !important; text-decoration: none; padding: 12px 25px; font-weight: bold; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; border-radius: 2px; margin: 20px 0; }
+    .credentials { background: #f5f5f5; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 16px; font-weight: bold; text-align: center; letter-spacing: 0.05em; color: #c5a059; border: 1px dashed #d4af37; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="logo">ROY MEN</div>
+      <div style="font-size: 8px; letter-spacing: 0.3em; text-transform: uppercase; color: #71717a; margin-top: 5px;">WEAR CONFIDENCE</div>
+    </div>
+    <h3 style="margin-top:0; font-family:serif; font-weight:normal;">ADMINISTRATIVE SECURITY OVERRIDE</h3>
+    <p>Dear ${user.name},</p>
+    <p>Please be advised that an administrator has reset your account password credentials for the <strong>ROY MEN</strong> online portal.</p>
+    <p>Your temporary credentials are provided below:</p>
+    <div class="credentials">${newPassword}</div>
+    <p>For security, please log in immediately using the link below and change your password in your user settings dashboard.</p>
+    <div style="text-align: center;">
+      <a href="${process.env.APP_URL || 'https://roymen.com'}/#/login" class="btn">Login & Update Password</a>
+    </div>
+    <hr style="border:none; border-top:1px solid #eaeaea; margin: 20px 0;" />
+    <p style="font-size:10px; color:#71717a; text-align:center; margin:0;">© ${new Date().getFullYear()} ROY MEN Bangladesh. All Rights Reserved.</p>
+  </div>
+</body>
+</html>
+    `;
+
+    await recordEmailLog(user.email, 'Administrative Password Reset', 'An administrator administratively reset your account password (Sandbox).');
+    await sendEmail(user.email, 'Security Alert: Password Administratively Reset | ROY MEN', emailHtml);
+
+    res.json({ message: `Successfully reset password for customer ${user.name}. Email dispatched.` });
+  }
+});
+
+// ⚠️ SYSTEM HEALTH: TEST SMTP EMAIL ROUTING FUNCTIONALITY
+app.get('/api/test-email', async (req, res) => {
+  const recipient = (req.query.to as string) || process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
+  if (!recipient) {
+    return res.status(400).json({ message: 'No recipient provided. Set "to" query parameter or configure EMAIL_USER/ADMIN_EMAIL in env.' });
+  }
+
+  const testHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body { font-family: sans-serif; background-color: #fafafa; color: #1a1a1a; padding: 20px; }
+    .card { max-width: 500px; margin: 0 auto; background: #fff; border: 1px solid #eaeaea; border-radius: 4px; padding: 30px; box-shadow: 0 4px 12px rgba(0,0,0,0.03); }
+    .header { text-align: center; border-bottom: 2px solid #d4af37; padding-bottom: 20px; margin-bottom: 20px; }
+    .logo { font-size: 24px; font-weight: 900; letter-spacing: 0.2em; font-family: serif; }
+    .meta-table { w-full border-collapse: collapse; margin-top: 15px; font-size: 11px; }
+    .meta-table td { padding: 6px 0; border-bottom: 1px solid #f5f5f5; }
+    .label { font-weight: bold; color: #71717a; width: 140px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .btn { display: inline-block; background: #000; color: #fff !important; text-decoration: none; padding: 12px 25px; font-weight: bold; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; border-radius: 2px; margin: 20px 0; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="logo">ROY MEN</div>
+      <div style="font-size: 8px; letter-spacing: 0.3em; text-transform: uppercase; color: #71717a; margin-top: 5px;">WEAR CONFIDENCE</div>
+    </div>
+    <h3 style="margin-top:0; font-family:serif; font-weight:normal; letter-spacing:0.02em;">SYSTEM ROUTING DIAGNOSTICS</h3>
+    <p>This is a high-performance verification payload dispatched from the <strong>ROY MEN</strong> e-commerce application backend.</p>
+    <p>If you are reading this email, your Nodemailer integration and Gmail SMTP configurations are 100% correct, verified, and active.</p>
+    
+    <table class="meta-table" style="width: 100%;">
+      <tr>
+        <td class="label">Fulfillment Status:</td>
+        <td><span style="background-color: #d4af37; color: #000; padding: 3px 8px; font-size: 9px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em;">ACTIVE</span></td>
+      </tr>
+      <tr>
+        <td class="label">Timestamp Code:</td>
+        <td style="font-family: monospace; font-size: 12px;">${new Date().toISOString()}</td>
+      </tr>
+      <tr>
+        <td class="label">Transport Engine:</td>
+        <td>Nodemailer (Direct Gmail Secure Pool)</td>
+      </tr>
+    </table>
+    
+    <hr style="border:none; border-top:1px solid #eaeaea; margin: 25px 0;" />
+    <p style="font-size:10px; color:#71717a; text-align:center; margin:0;">© ${new Date().getFullYear()} ROY MEN Bangladesh. All Rights Reserved.</p>
+  </div>
+</body>
+</html>
+  `;
+
+  console.log(`[ROYMEN TestEmail] Triggering test email to: ${recipient}...`);
+  const success = await sendEmail(recipient, 'Test Connection: Verified Active | ROY MEN', testHtml);
+
+  if (success) {
+    res.json({ status: 'success', message: `Test connection successfully routed. Inspect inbox of ${recipient}` });
+  } else {
+    res.status(500).json({ status: 'error', message: 'Failed to route SMTP mail. Inspect server terminal logs for detailed stacktrace.' });
   }
 });
 

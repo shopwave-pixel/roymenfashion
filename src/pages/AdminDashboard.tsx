@@ -69,15 +69,21 @@ export const AdminDashboard: React.FC = () => {
     navigate("/login");
   };
 
-  const [activeTab, setActiveTab] = useState<'analytics' | 'products' | 'orders' | 'emails'>('analytics');
+  const [activeTab, setActiveTab] = useState<'analytics' | 'products' | 'orders' | 'emails' | 'users'>('analytics');
   
   // States loaded from dynamic endpoints
   const [analytics, setAnalytics] = useState<any | null>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [emailLogs, setEmailLogs] = useState<any[]>([]);
+  const [usersList, setUsersList] = useState<any[]>([]);
   const [loadingAnalytics, setLoadingAnalytics] = useState(true);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [loadingEmails, setLoadingEmails] = useState(false);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+
+  // User management states
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null);
+  const [newPasswordVal, setNewPasswordVal] = useState('');
 
   // Dynamic Product Form Dialog states
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -164,11 +170,59 @@ export const AdminDashboard: React.FC = () => {
     setLoadingEmails(false);
   };
 
+  const loadUsers = async () => {
+    if (!token) return;
+    setLoadingUsers(true);
+    try {
+      const res = await fetch('/api/admin/users', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUsersList(data);
+      }
+    } catch (e) {
+      console.error("Failed to load users", e);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const handleResetPassword = async (targetUserId: string, pass: string) => {
+    if (!token || !pass || pass.trim().length < 4) {
+      addToast(getTranslatedText("Password must be at least 4 characters long", "পাসওয়ার্ড অবশ্যই ৪ অক্ষরের হতে হবে"), "error");
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/users/${targetUserId}/reset-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ newPassword: pass })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        addToast(getTranslatedText("Customer password reset successfully! Email dispatched.", "গ্রাহকের পাসওয়ার্ড সফলভাবে রিসেট করা হয়েছে! ইমেইল পাঠানো হয়েছে।"), "success");
+        setResettingUserId(null);
+        setNewPasswordVal('');
+        loadUsers();
+      } else {
+        addToast(data.message || "Failed to reset password", "error");
+      }
+    } catch (e) {
+      console.error("Failed to reset password", e);
+      addToast("Failed to communicate with authentication servers", "error");
+    }
+  };
+
   useEffect(() => {
     if (token && user?.role === 'admin') {
       loadAnalytics();
       loadOrders();
       loadEmails();
+      loadUsers();
     }
   }, [token, user]);
 
@@ -297,7 +351,8 @@ export const AdminDashboard: React.FC = () => {
               { id: 'analytics', label: 'Operational Analytics', icon: TrendUpIcon },
               { id: 'products', label: 'Wardrobe Catalog', icon: PackIcon },
               { id: 'orders', label: 'Fulfillment & Payments', icon: ShopBagIcon },
-              { id: 'emails', label: 'Email Notifications', icon: Mail }
+              { id: 'emails', label: 'Email Notifications', icon: Mail },
+              { id: 'users', label: 'User Accounts', icon: Users }
             ].map(tab => (
               <button
                 key={tab.id}
@@ -782,6 +837,124 @@ export const AdminDashboard: React.FC = () => {
                           </tbody>
                         </table>
                       </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 5: USER MANAGEMENT ACCOUNT CONTROL DESK */}
+            {activeTab === 'users' && (
+              <div className="space-y-6 animate-fade-in">
+                
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-3 border-b gap-4">
+                  <div>
+                    <h2 className="text-xl font-black uppercase tracking-widest text-black dark:text-white">
+                      {getTranslatedText("Customer Accounts Registry", "কাস্টমার অ্যাকাউন্টস")}
+                    </h2>
+                    <p className="text-xs text-zinc-500 font-mono mt-1">
+                      Manage client credentials, inspect transaction history, and perform administrative security overrides.
+                    </p>
+                  </div>
+                  <button
+                    onClick={loadUsers}
+                    disabled={loadingUsers}
+                    className="px-4 py-2 bg-zinc-900 border border-zinc-850 hover:bg-zinc-800 text-white dark:bg-zinc-50 dark:text-black dark:border-white text-[10px] font-black uppercase tracking-[0.14em] rounded transition-all disabled:opacity-50"
+                  >
+                    {loadingUsers ? "Refreshing..." : "Refresh Customer List"}
+                  </button>
+                </div>
+
+                {loadingUsers ? (
+                  <div className="py-20 text-center font-mono text-zinc-500 bg-zinc-50 dark:bg-zinc-900 rounded-xl">
+                    Loading customer accounts ledger...
+                  </div>
+                ) : usersList.length === 0 ? (
+                  <div className="border border-dashed border-zinc-200 dark:border-zinc-800 p-12 text-center rounded-xl space-y-4 bg-zinc-50/10">
+                    <div className="mx-auto w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-zinc-400">
+                      <Users size={22} />
+                    </div>
+                    <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                      No customer profiles registered.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="border border-zinc-150 dark:border-zinc-850 rounded-xl overflow-hidden bg-white dark:bg-zinc-950">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse">
+                        <thead>
+                          <tr className="bg-zinc-50 dark:bg-zinc-900 text-[10px] uppercase font-black tracking-wider text-zinc-500 border-b border-zinc-150 dark:border-zinc-850">
+                            <th className="py-3.5 px-4 font-mono">Customer Name</th>
+                            <th className="py-3.5 px-4 font-mono">Email Address</th>
+                            <th className="py-3.5 px-4 font-mono">Orders Metric</th>
+                            <th className="py-3.5 px-4 font-mono text-right">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-zinc-150 dark:divide-zinc-850 text-xs font-semibold">
+                          {usersList.map((customer: any) => (
+                            <tr key={customer.id} className="hover:bg-zinc-50/50 dark:hover:bg-zinc-900/10 transition-colors">
+                              <td className="py-4 px-4">
+                                <div className="flex items-center space-x-3">
+                                  <div className="w-8 h-8 rounded-full bg-yellow-500/10 text-yellow-500 font-bold font-mono text-xs flex items-center justify-center border border-yellow-500/20">
+                                    {(customer.name || 'C').charAt(0).toUpperCase()}
+                                  </div>
+                                  <div>
+                                    <div className="font-bold text-zinc-900 dark:text-white">{customer.name}</div>
+                                    <div className="text-[10px] text-zinc-400">ID: {customer.id}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-4 px-4 font-mono text-zinc-700 dark:text-zinc-350">
+                                {customer.email}
+                              </td>
+                              <td className="py-4 px-4 font-mono">
+                                <div className="text-zinc-800 dark:text-zinc-200 font-bold">{customer.orderCount || 0} Orders</div>
+                                <div className="text-[10px] text-yellow-600">Spent: ৳{(customer.totalSpent || 0).toLocaleString()}</div>
+                              </td>
+                              <td className="py-4 px-4 text-right">
+                                {resettingUserId === customer.id ? (
+                                  <div className="flex flex-col sm:flex-row items-end sm:items-center justify-end gap-2 animate-[fade-in_0.2s_ease]" onClick={(e) => e.stopPropagation()}>
+                                    <input
+                                      type="text"
+                                      placeholder="New password (min 4)"
+                                      value={newPasswordVal}
+                                      onChange={(e) => setNewPasswordVal(e.target.value)}
+                                      className="px-2.5 py-1.5 border border-zinc-200 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white rounded text-[11px] font-mono w-40 font-bold focus:border-yellow-500 focus:outline-none"
+                                    />
+                                    <div className="flex space-x-1">
+                                      <button
+                                        onClick={() => handleResetPassword(customer.id, newPasswordVal)}
+                                        className="px-2.5 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-black text-[9px] font-black uppercase tracking-wider rounded transition-all"
+                                      >
+                                        Apply
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setResettingUserId(null);
+                                          setNewPasswordVal('');
+                                        }}
+                                        className="px-2.5 py-1.5 bg-zinc-200 hover:bg-zinc-350 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-300 text-[9px] font-black uppercase tracking-wider rounded transition-all"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={() => {
+                                      setResettingUserId(customer.id);
+                                      setNewPasswordVal('RoyMenTemp2026'); // Prepopulate with a gorgeous temporary password!
+                                    }}
+                                    className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-black hover:bg-zinc-900 border border-zinc-850 dark:bg-white dark:text-black dark:hover:bg-zinc-100 text-white font-mono text-[9px] font-black uppercase tracking-wider rounded transition-all"
+                                  >
+                                    <span>Reset Password</span>
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   </div>
                 )}

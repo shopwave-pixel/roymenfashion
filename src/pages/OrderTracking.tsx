@@ -35,7 +35,22 @@ export const OrderTracking: React.FC = () => {
   ];
 
   const getStatusIndex = (status: string) => {
-    // If Status is payment rejected, consider it index -1
+    if (!status) return 0;
+    const s = status.toLowerCase();
+    
+    if (s.includes('pending') && s.includes('payment')) return 0;
+    if (s === 'pending') return 0;
+    
+    if (s.includes('verification') || s.includes('audit')) return 1;
+    
+    if (s.includes('confirmed') || s.includes('approved')) return 2;
+    
+    if (s.includes('processing') || s.includes('packed')) return 3;
+    
+    if (s.includes('shipped')) return 4;
+    
+    if (s.includes('delivered')) return 5;
+    
     return STATUSES.indexOf(status);
   };
 
@@ -251,6 +266,48 @@ export const OrderTracking: React.FC = () => {
               <p>📍 Location Address: {order.billingDetails.address}, <strong className="text-zinc-900 dark:text-zinc-100">{order.billingDetails.district} (Bangladesh)</strong></p>
               <p>📞 Phone Coordinate: +88{order.billingDetails.phone}</p>
             </div>
+
+            {/* Courier, Tracking Number & Tracking URL info */}
+            {(order.courierName || order.trackingNumber || order.trackingUrl) && (
+              <div className="p-4 bg-yellow-500/5 border border-yellow-500/20 rounded-xl space-y-2 text-xs leading-relaxed font-semibold">
+                <p className="font-extrabold uppercase text-yellow-600 dark:text-yellow-500 text-[10px] inline-flex items-center">
+                  <Truck size={14} className="mr-1.5" />
+                  <span>SHIPPING & COURIER LOGISTICS DETAILS:</span>
+                </p>
+                {order.courierName && (
+                  <p className="text-zinc-700 dark:text-zinc-300">
+                    Courier Company: <span className="font-bold text-zinc-900 dark:text-white">{order.courierName}</span>
+                  </p>
+                )}
+                {order.trackingNumber && (
+                  <p className="text-zinc-700 dark:text-zinc-300">
+                    Tracking ID Code: <span className="font-mono font-bold text-zinc-900 dark:text-white bg-zinc-200/50 dark:bg-zinc-800/50 px-1.5 py-0.5 rounded">{order.trackingNumber}</span>
+                  </p>
+                )}
+                {order.trackingUrl && (
+                  <p className="pt-1">
+                    <a 
+                      href={order.trackingUrl.startsWith('http') ? order.trackingUrl : `https://${order.trackingUrl}`}
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="inline-flex items-center text-yellow-600 hover:text-yellow-700 dark:text-yellow-500 dark:hover:text-yellow-400 font-extrabold hover:underline"
+                    >
+                      <span>🌐 {getTranslatedText("TRACK SHIPMENT VIA COURIER PORTAL", "কুরিয়ার পোর্টালে পার্সেল ট্র্যাক করুন")}</span>
+                    </a>
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Last Reconciled Timestamp */}
+            {(order.updatedAt || order.createdAt) && (
+              <div className="flex justify-between items-center text-[10px] font-bold text-zinc-400 uppercase tracking-wider pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                <span>LAST RECONCILED TIMESTAMP:</span>
+                <span className="font-mono text-zinc-600 dark:text-zinc-300">
+                  {new Date(order.updatedAt || order.createdAt).toLocaleString('en-US', { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+              </div>
+            )}
 
           </div>
         ) : (

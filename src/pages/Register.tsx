@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { User, Mail, Lock, UserPlus, ArrowRight } from 'lucide-react';
+import { RoyMenLogo } from '../components/RoyMenLogo';
 
 export const Register: React.FC = () => {
   const { registerUser, getTranslatedText, addToast } = useShop();
@@ -36,16 +37,19 @@ export const Register: React.FC = () => {
         {/* Gold visual trim */}
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-yellow-500"></div>
 
-        <div className="text-center space-y-2">
-          <span className="text-[10px] font-bold tracking-[0.43em] text-yellow-600 dark:text-yellow-500 uppercase">
-            {getTranslatedText("SARTORIAL JOINING", "রয়মেনে রাজকীয় নিবন্ধন")}
-          </span>
-          <h1 className="text-3xl font-black uppercase tracking-widest text-black dark:text-white">
-            {getTranslatedText("REGISTER", "নিবন্ধন")}
-          </h1>
-          <p className="text-xs text-zinc-500 font-semibold leading-relaxed">
-            {getTranslatedText("Establish your identity catalog ledger to wear confidence.", "আপনার রয়মেন প্রোফাইল নিবন্ধন করে সেলাই ও অর্ডারের আপডেট চেক করুন।")}
-          </p>
+        <div className="text-center space-y-4">
+          <RoyMenLogo size="md" showTagline={false} className="mx-auto" />
+          <div className="space-y-1.5">
+            <span className="text-[10px] font-bold tracking-[0.43em] text-yellow-600 dark:text-yellow-500 uppercase block">
+              {getTranslatedText("SARTORIAL JOINING", "রয়মেনে রাজকীয় নিবন্ধন")}
+            </span>
+            <h1 className="text-3xl font-black uppercase tracking-widest text-black dark:text-white">
+              {getTranslatedText("REGISTER", "নিবন্ধন")}
+            </h1>
+            <p className="text-xs text-zinc-500 font-semibold leading-relaxed">
+              {getTranslatedText("Establish your identity catalog ledger to wear confidence.", "আপনার রয়মেন প্রোফাইল নিবন্ধন করে সেলাই ও অর্ডারের আপডেট চেক করুন।")}
+            </p>
+          </div>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5 text-xs font-semibold text-zinc-650">
