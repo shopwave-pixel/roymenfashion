@@ -1936,6 +1936,8 @@ app.get('/api/test-smtp', async (req, res) => {
         responseCode: error.responseCode || 'N/A',
         errno: error.errno || 'N/A',
         syscall: error.syscall || 'N/A',
+        address: error.address || 'N/A',
+        port: error.port || 'N/A',
         stack: error.stack || 'N/A'
       }
     });
@@ -1947,6 +1949,29 @@ app.get('/api/test-email', async (req, res) => {
   const recipient = (req.query.to as string) || process.env.ADMIN_EMAIL || process.env.EMAIL_USER;
   if (!recipient) {
     return res.status(400).json({ message: 'No recipient provided. Set "to" query parameter or configure EMAIL_USER/ADMIN_EMAIL in env.' });
+  }
+
+  // Pre-verify connection to give exact verification details immediately if failed
+  console.log('[ROYMEN TestEmail] Running transporter.verify() check before attempting to send...');
+  const smtpVerify = await verifySmtpConnection();
+  if (!smtpVerify.success) {
+    const verifyErr = smtpVerify.error || {};
+    return res.status(500).json({
+      status: 'error',
+      message: 'SMTP pre-verification failed (transporter.verify() failed). Email dispatch halted.',
+      error: {
+        message: verifyErr.message || 'SMTP Pre-Verification Failed',
+        code: verifyErr.code || 'N/A',
+        command: verifyErr.command || 'N/A',
+        response: verifyErr.response || 'N/A',
+        responseCode: verifyErr.responseCode || 'N/A',
+        errno: verifyErr.errno || 'N/A',
+        syscall: verifyErr.syscall || 'N/A',
+        address: verifyErr.address || 'N/A',
+        port: verifyErr.port || 'N/A',
+        stack: verifyErr.stack || 'N/A'
+      }
+    });
   }
 
   const testHtml = `
@@ -1993,7 +2018,7 @@ app.get('/api/test-email', async (req, res) => {
     <hr style="border:none; border-top:1px solid #eaeaea; margin: 25px 0;" />
     <p style="font-size:10px; color:#71717a; text-align:center; margin:0;">© ${new Date().getFullYear()} ROY MEN Bangladesh. All Rights Reserved.</p>
   </div>
-</body>
+ </body>
 </html>
   `;
 
@@ -2006,11 +2031,10 @@ app.get('/api/test-email', async (req, res) => {
       return res.status(500).json({ status: 'error', message: 'Failed to route SMTP mail. Inspect server terminal logs for detailed stacktrace.' });
     }
   } catch (error: any) {
-    const isProduction = process.env.NODE_ENV === 'production';
     return res.status(500).json({
       status: 'error',
       message: 'Failed to route SMTP mail. Inspect server terminal logs for detailed stacktrace.',
-      error: !isProduction ? {
+      error: {
         message: error.message || 'Unknown SMTP Error',
         code: error.code || 'N/A',
         command: error.command || 'N/A',
@@ -2021,7 +2045,7 @@ app.get('/api/test-email', async (req, res) => {
         address: error.address || 'N/A',
         port: error.port || 'N/A',
         stack: error.stack || 'N/A'
-      } : undefined
+      }
     });
   }
 });
