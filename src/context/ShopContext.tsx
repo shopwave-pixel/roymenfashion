@@ -1015,10 +1015,18 @@ export const ShopProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     // 1. Post to live backend if possible
+    if (!token) {
+      addToast(getTranslatedText("Authentication required. Please sign in to place your order.", "লগইন আবশ্যক। দয়া করে সাইন-ইন করুন।"), "error");
+      return null;
+    }
+
     try {
       const res = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify(orderPayload)
       });
       if (res.ok) {

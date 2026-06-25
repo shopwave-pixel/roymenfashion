@@ -2444,7 +2444,9 @@ var App = {
     try {
       var ss = SpreadsheetApp.getActiveSpreadsheet();
 
-      DashboardService.initializeDashboard();
+      if (typeof DashboardService !== "undefined") {
+        DashboardService.initializeDashboard();
+      }
 
       this.ensureSheetExists(ss, CONFIG.SHEETS.ORDERS, CONFIG.HEADERS.ORDERS);
       this.ensureSheetExists(ss, CONFIG.SHEETS.PRODUCTS, CONFIG.HEADERS.PRODUCTS);
@@ -2453,16 +2455,33 @@ var App = {
       this.ensureSheetExists(ss, CONFIG.SHEETS.PAYMENT_HISTORY, CONFIG.HEADERS.PAYMENT_HISTORY);
       this.ensureSheetExists(ss, CONFIG.SHEETS.AUDIT_LOG, CONFIG.HEADERS.AUDIT_LOG);
 
-      SettingsService.initializeSettingsSheet(ss);
+      if (typeof SettingsService !== "undefined") {
+        SettingsService.initializeSettingsSheet(ss);
+      }
 
-      ReportService.generateReportLedger();
-      AnalyticsService.generateOperationalCharts();
+      if (typeof ReportService !== "undefined") {
+        ReportService.generateReportLedger();
+      }
+      if (typeof AnalyticsService !== "undefined") {
+        AnalyticsService.generateOperationalCharts();
+      }
 
-      OrderService.beautifyOrdersSheet(ss.getSheetByName(CONFIG.SHEETS.ORDERS));
-      CustomerService.applyCustomerFormatting(ss.getSheetByName(CONFIG.SHEETS.CUSTOMERS));
-      ProductService.applyProductFormatting(ss.getSheetByName(CONFIG.SHEETS.PRODUCTS));
+      if (typeof OrderService !== "undefined") {
+        var ordersSheet = ss.getSheetByName(CONFIG.SHEETS.ORDERS);
+        if (ordersSheet) OrderService.beautifyOrdersSheet(ordersSheet);
+      }
+      if (typeof CustomerService !== "undefined") {
+        var customersSheet = ss.getSheetByName(CONFIG.SHEETS.CUSTOMERS);
+        if (customersSheet) CustomerService.applyCustomerFormatting(customersSheet);
+      }
+      if (typeof ProductService !== "undefined") {
+        var productsSheet = ss.getSheetByName(CONFIG.SHEETS.PRODUCTS);
+        if (productsSheet) ProductService.applyProductFormatting(productsSheet);
+      }
 
-      AuditService.log(CONFIG.LOGGING.LEVELS.INFO, null, "Entire enterprise sheet database initialized successfully.");
+      if (typeof AuditService !== "undefined") {
+        AuditService.log(CONFIG.LOGGING.LEVELS.INFO, null, "Entire enterprise sheet database initialized successfully.");
+      }
     } catch (err) {
       console.error("System initialization exception: " + err.toString());
     }

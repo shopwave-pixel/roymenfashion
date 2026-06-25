@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
 import { User, Mail, Lock, UserPlus, ArrowRight } from 'lucide-react';
 import { RoyMenLogo } from '../components/RoyMenLogo';
@@ -11,6 +11,9 @@ export const Register: React.FC = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const from = (location.state as any)?.from?.pathname || "/dashboard";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,7 +29,7 @@ export const Register: React.FC = () => {
     setLoading(false);
 
     if (success) {
-      navigate('/dashboard');
+      navigate(from, { replace: true });
     }
   };
 

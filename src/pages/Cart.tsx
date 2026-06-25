@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useShop } from '../context/ShopContext';
-import { ShoppingBag, ArrowLeft, Trash2, CheckCircle, Gift, CreditCard, ShieldCheck } from 'lucide-react';
+import { ShoppingBag, ArrowLeft, Trash2, CheckCircle, Gift, CreditCard, ShieldCheck, Lock } from 'lucide-react';
 
 export const districtAreas: Record<string, { en: string; bn: string }[]> = {
   "Bagerhat": [
@@ -840,7 +840,41 @@ export const Cart: React.FC = () => {
           {/* LEFT GIRD segment: Address Form + Vouchers info (col: 7) */}
           <div className="lg:col-span-7 space-y-8">
             
-            <form onSubmit={handlePlaceOrder} className="bg-zinc-50 dark:bg-zinc-900/40 p-6 sm:p-8 rounded-xl border border-zinc-150 dark:border-zinc-850 space-y-6">
+            {!user ? (
+              <div className="bg-zinc-50 dark:bg-zinc-900/40 p-8 rounded-xl border border-zinc-150 dark:border-zinc-850 text-center space-y-6">
+                <div className="w-16 h-16 bg-amber-500/10 dark:bg-amber-500/5 rounded-full flex items-center justify-center mx-auto text-amber-600 dark:text-amber-500">
+                  <Lock size={30} />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-sm font-black uppercase tracking-widest text-black dark:text-white">
+                    {getTranslatedText("Authentication Required", "লগইন করা আবশ্যক")}
+                  </h2>
+                  <p className="text-xs text-zinc-500 font-medium max-w-md mx-auto leading-relaxed">
+                    {getTranslatedText(
+                      "To place an order and track your shipping journey securely, you must have an active ROY MEN account. Please log in or register to finalize your checkout.",
+                      "অর্ডার সম্পন্ন করতে এবং আপনার শিপিং ট্র্যাক করতে একটি রয়মেন অ্যাকাউন্ট প্রয়োজন। অনুগ্রহ করে অর্ডারটি কনফার্ম করতে লগইন বা রেজিস্টার করুন।"
+                    )}
+                  </p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2 text-xs">
+                  <Link
+                    to="/login"
+                    state={{ from: { pathname: '/cart' } }}
+                    className="px-6 py-3 bg-black text-white dark:bg-white dark:text-black font-bold uppercase tracking-wider rounded hover:bg-zinc-800 dark:hover:bg-zinc-200 transition-all"
+                  >
+                    {getTranslatedText("Login / Sign In", "লগইন করুন")}
+                  </Link>
+                  <Link
+                    to="/register"
+                    state={{ from: { pathname: '/cart' } }}
+                    className="px-6 py-3 border border-zinc-200 dark:border-zinc-800 text-zinc-800 dark:text-zinc-200 font-bold uppercase tracking-wider rounded hover:bg-zinc-100 dark:hover:bg-zinc-900/50 transition-all"
+                  >
+                    {getTranslatedText("Register / Sign Up", "নিবন্ধন করুন")}
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handlePlaceOrder} className="bg-zinc-50 dark:bg-zinc-900/40 p-6 sm:p-8 rounded-xl border border-zinc-150 dark:border-zinc-850 space-y-6">
               
               <h2 className="text-sm font-black uppercase tracking-widest text-black dark:text-white flex items-center">
                 <span>1. {getTranslatedText("Shipping & Delivery Information", "ডেলিভারি ও কুরিয়ার ঠিকানা")}</span>
@@ -1200,6 +1234,7 @@ export const Cart: React.FC = () => {
               </button>
 
             </form>
+            )}
 
           </div>
 

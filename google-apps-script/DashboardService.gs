@@ -49,8 +49,7 @@ var DashboardService = {
         .setFontWeight("normal")
         .setFontColor(CONFIG.THEME.ACCENT_GOLD)
         .setHorizontalAlignment("center")
-        .setVerticalAlignment("middle")
-        .setLineSpacing(2);
+        .setVerticalAlignment("middle");
 
       // Draw subtle champagne divider bar under title
       var divider = sheet.getRange("A3:H3");

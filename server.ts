@@ -1,3 +1,5 @@
+import dotenv from 'dotenv';
+dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
@@ -545,12 +547,19 @@ const triggerGoogleAppsScriptWebhook = async (order: any, ip: string = 'N/A', us
     };
 
     console.log(`[ROYMEN Sheets Sync] Sending order ${order.id} data to Google Sheets...`);
+    const apiKey = process.env.GOOGLE_APPS_SCRIPT_API_KEY || "ROY_MEN_SECURE_API_KEY_2026";
+    const secret = process.env.GOOGLE_APPS_SCRIPT_WEBHOOK_SECRET || "ROY_MEN_WEBHOOK_INTEGRITY_SALT_2026";
+    const bodyStr = JSON.stringify(payload);
+    const signature = crypto.createHmac('sha256', secret).update(bodyStr).digest('hex');
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'X-ROYMEN-API-KEY': apiKey,
+        'X-ROYMEN-SIGNATURE': signature
       },
-      body: JSON.stringify(payload)
+      body: bodyStr
     });
 
     const text = await response.text();
@@ -1518,8 +1527,8 @@ app.post('/api/products/:id/review', authenticateToken, async (req: express.Requ
 });
 
 // ⚠️ PLACE CUSTOMER ORDER REGISTRY
-app.post('/api/orders', async (req, res) => {
-  const { userId, billingDetails, items, subtotal, discount, deliveryFee, total, timeline, paymentMethod } = req.body;
+app.post('/api/orders', authenticateToken, async (req: express.Request & { user?: any }, res) => {
+  const { billingDetails, items, subtotal, discount, deliveryFee, total, timeline, paymentMethod } = req.body;
 
   if (!billingDetails || !items || !items.length || !total) {
     return res.status(400).json({ message: 'Invalid order structure parameters.' });
@@ -1528,7 +1537,7 @@ app.post('/api/orders', async (req, res) => {
   const generatedOrderId = 'RM-' + Math.floor(100000 + Math.random() * 900000);
   const placement = {
     id: generatedOrderId,
-    userId: userId || null,
+    userId: req.user?.id || null,
     billingDetails,
     items,
     subtotal,
