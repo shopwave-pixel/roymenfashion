@@ -28,32 +28,29 @@ let transporter: nodemailer.Transporter | null = null;
 export const getTransporter = (): nodemailer.Transporter => {
   if (!transporter) {
     const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
-    const port = Number(process.env.EMAIL_PORT || '587');
+    const port = Number(process.env.EMAIL_PORT || '465');
+    const secure = true; // Force Gmail SSL on port 465
     const user = process.env.EMAIL_USER;
     const pass = process.env.EMAIL_PASS;
-    const from = process.env.EMAIL_FROM || user || '';
 
     if (!user || !pass) {
       console.warn('[ROYMEN Email] Warning: EMAIL_USER and EMAIL_PASS are not configured. Emails will log to terminal fallback only.');
     }
 
-    // 4. Verify host, port, secure, auth, connectionTimeout, greetingTimeout, socketTimeout, TLS settings
-    // 5. Port 587 uses secure:false, 6. Port 465 uses secure:true
+    // Configure Nodemailer specifically for Gmail SSL on port 465
     transporter = nodemailer.createTransport({
       host,
       port,
-      secure: port === 465, // True for 465, false for 587 (using STARTTLS)
+      secure,
       auth: {
         user: user || '',
         pass: pass || ''
       },
-      connectionTimeout: 15000, // 15 seconds connection timeout
-      greetingTimeout: 15000,   // 15 seconds greeting timeout
-      socketTimeout: 30000,     // 30 seconds socket timeout
-      tls: {
-        rejectUnauthorized: false, // Prevents issues with self-signed certs in sandboxes
-        minVersion: 'TLSv1.2'      // Enforce modern secure TLS version
-      },
+      debug: true,             // Enable detailed SMTP debugging
+      logger: true,            // Enable detailed SMTP logger
+      connectionTimeout: 60000, // 60 seconds connection timeout
+      greetingTimeout: 60000,   // 60 seconds greeting timeout
+      socketTimeout: 60000,     // 60 seconds socket timeout
       // Force IPv4 DNS resolution to prevent IPv6 ENETUNREACH errors on platforms like Railway
       lookup: (hostname: string, options: any, callback: any) => {
         if (typeof options === 'function') {
@@ -61,7 +58,14 @@ export const getTransporter = (): nodemailer.Transporter => {
           options = {};
         }
         const dnsOpts = typeof options === 'object' && options !== null ? { ...options, family: 4 } : { family: 4 };
-        dns.lookup(hostname, dnsOpts, callback);
+        dns.lookup(hostname, dnsOpts, (err, address, family) => {
+          if (!err) {
+            console.log(`[SMTP DNS Lookup] Resolved ${hostname} to ${address} (IPv${family})`);
+          } else {
+            console.error(`[SMTP DNS Lookup Failed] ${hostname}:`, err);
+          }
+          callback(err, address, family);
+        });
       }
     } as any);
   }
@@ -72,6 +76,23 @@ export const getTransporter = (): nodemailer.Transporter => {
  * 10. Verify SMTP connection directly using verifySmtpConnection helper
  */
 export async function verifySmtpConnection(): Promise<{ success: boolean; error?: any }> {
+  const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
+  const port = Number(process.env.EMAIL_PORT || '465');
+  const secure = true;
+
+  let resolvedIp = 'Unknown';
+  try {
+    const lookupResult = await dns.promises.lookup(host, { family: 4 });
+    resolvedIp = lookupResult.address;
+  } catch (dnsErr: any) {
+    console.error('[ROYMEN SMTP DNS Resolve Failed]', dnsErr.message || dnsErr);
+  }
+
+  const startTime = Date.now();
+  let connectionTime = 0;
+  let smtpResponse = 'N/A';
+  let authResult = 'PENDING';
+
   try {
     const activeTransporter = getTransporter();
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
@@ -86,9 +107,36 @@ export async function verifySmtpConnection(): Promise<{ success: boolean; error?
     
     try {
       await activeTransporter.verify();
+      connectionTime = Date.now() - startTime;
+      smtpResponse = '250 Connection established and verified successfully.';
+      authResult = 'SUCCESS / PASSED';
+
+      console.log('=================== SMTP DIAGNOSTIC VERIFICATION SUCCESS ===================');
+      console.log(`- Host:                  ${host}`);
+      console.log(`- Port:                  ${port}`);
+      console.log(`- Secure:                ${secure}`);
+      console.log(`- Resolved IP:           ${resolvedIp}`);
+      console.log(`- Connection Time:       ${connectionTime} ms`);
+      console.log(`- SMTP Response:         ${smtpResponse}`);
+      console.log(`- Authentication Result: ${authResult}`);
+      console.log('============================================================================');
     } catch (verifyErr: any) {
+      connectionTime = Date.now() - startTime;
+      smtpResponse = verifyErr.response || verifyErr.message || 'Error occurred during SMTP handshake';
+      authResult = 'FAILED';
+
       console.error('[ROYMEN SMTP Verify Error Caught via activeTransporter.verify()]');
       console.error(verifyErr); // Log complete error object
+
+      console.log('=================== SMTP DIAGNOSTIC VERIFICATION FAILURE ===================');
+      console.log(`- Host:                  ${host}`);
+      console.log(`- Port:                  ${port}`);
+      console.log(`- Secure:                ${secure}`);
+      console.log(`- Resolved IP:           ${resolvedIp}`);
+      console.log(`- Connection Time:       ${connectionTime} ms`);
+      console.log(`- SMTP Response:         ${smtpResponse}`);
+      console.log(`- Authentication Result: ${authResult}`);
+      console.log('============================================================================');
       throw verifyErr;
     }
     
